@@ -21,8 +21,8 @@ RISK_THRESHOLDS = {
 }
 
 # File Paths
-FEATURE_CACHE_DB = "data/feature_cache.sqlite"
-AUDIT_LOG_PATH = "data/audit.jsonl"
-MODEL_PATH = "models/xgboost_mobileguard.json"
-CERTINTEL_IOC_PATH = "data/certin_iocs.json"
-C2_BLOCKLIST_PATH = "data/c2_ips.txt"
+FEATURE_CACHE_DB = "./data/feature_cache.sqlite"
+AUDIT_LOG_PATH = "./data/audit.jsonl"
+MODEL_PATH = "./models/xgboost_mobileguard.json"
+CERTINTEL_IOC_PATH = "./data/certin_iocs.json"
+C2_BLOCKLIST_PATH = "./data/c2_ips.txt"

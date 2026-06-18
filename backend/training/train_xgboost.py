@@ -23,7 +23,7 @@ except ImportError:
 # Resolve the models/ directory relative to this file regardless of CWD.
 # backend/training/train_xgboost.py  →  go up two levels  →  project root/models/
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.normpath(os.path.join(_THIS_DIR, "..", "..", "models"))
+MODELS_DIR = os.path.normpath(os.path.join(_THIS_DIR, "models"))
 
 
 def _make_synthetic_dataset(n_benign: int = 800, n_malicious: int = 800, seed: int = 42) -> pd.DataFrame:
