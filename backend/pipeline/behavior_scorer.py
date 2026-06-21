@@ -29,5 +29,8 @@ def score_behavior(features):
 
     if features.silent_install_attempted:
         score += 20
+    
+    if features.overlay_detected:
+        score += 20
 
     return min(score, 100)
