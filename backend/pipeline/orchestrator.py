@@ -3,7 +3,7 @@ import time
 import uuid
 import dataclasses
 import json
-
+import hashlib
 try:
     from backend.pipeline.static_analyzer import StaticAnalyzer
     from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
@@ -12,6 +12,11 @@ try:
     from backend.pipeline.report_generator import ReportGenerator
     from backend.data.feature_store import FeatureStore
     from backend.data.audit_logger import AuditLogger
+    from backend.dataset_feature_extractor import extract_from_apk
+    from backend import config
+    from backend.detection.yara_engine import YaraEngine
+    from backend.intel.mitre_mapper import MitreMapper
+    from backend.intel.family_classifier import FamilyClassifier
 except ImportError:
     pass
 
@@ -25,6 +30,9 @@ class AnalysisResult:
     score: dict
     report: dict
     total_duration_ms: int
+    mitre: dict
+    family: dict
+    yara: dict
     
 @dataclasses.dataclass
 class PipelineEvent:
@@ -55,6 +63,9 @@ class PipelineOrchestrator:
         self.report_generator = ReportGenerator()
         self.feature_store = FeatureStore()
         self.audit_logger = AuditLogger()
+        self.yara_engine = YaraEngine()
+        self.mitre_mapper = MitreMapper()
+        self.family_classifier = FamilyClassifier()
         
     def save_to_temp(self, apk_bytes: bytes, filename: str) -> str:
         temp_dir = "temp_apks"
@@ -71,23 +82,138 @@ class PipelineOrchestrator:
 
     def analyze(self, apk_bytes: bytes, filename: str):
         t0 = time.time()
+
+        apk_hash = hashlib.sha256(apk_bytes).hexdigest()
+        cached = self.feature_store.get(apk_hash, config.MODEL_VERSION)
+        if cached:
+            try:
+                cached_result = AnalysisResult(**cached)
+                yield PipelineEvent(
+                    stage="cache_hit",
+                    status="done",
+                    progress=20
+                )
+                yield PipelineEvent(
+                    stage="complete",
+                    status="done",
+                    progress=100,
+                    result=cached_result
+                )
+                return
+            except Exception:
+                print("Cache entry invalid. Re-analyzing APK.")
+
         apk_path = self.save_to_temp(apk_bytes, filename)
 
         try:
             yield PipelineEvent(stage="static_analysis", status="running", progress=10)
             static = self.static_analyzer.analyze(apk_path)
 
+            yield PipelineEvent(
+                stage="yara_scan",
+                status="running",
+                progress=25
+            )
+
+            yara_result = self.yara_engine.scan(
+                apk_path
+            )
+
+            if yara_result.scan_error:
+
+                yield PipelineEvent(
+                    stage="yara_scan",
+                    status="warning",
+                    progress=25,
+                    error=yara_result.scan_error
+                )
+
+            mitre_findings = (
+                self.mitre_mapper.map_findings(
+                    static.permission_list,
+                    static.top_apis
+                )
+            )
+
+            family = (
+                self.family_classifier.classify(
+                    static.permission_list,
+                    static.top_apis
+                )
+            )
+
+
+            cached = self.feature_store.get(static.apk_hash, config.MODEL_VERSION)
+            if cached:
+                try:
+                    cached_result = AnalysisResult(**cached)
+                    yield PipelineEvent(
+                        stage="cache_hit",
+                        status="done",
+                        progress=20
+                    )
+
+                    yield PipelineEvent(
+                        stage="complete",
+                        status="done",
+                        progress=100,
+                        result=cached_result
+                    )
+                    return
+                except Exception:
+                    print("Cache entry invalid. Re-analyzing APK.")
+
             yield PipelineEvent(stage="dynamic_analysis", status="running", progress=40)
             dynamic = self.dynamic_analyzer.analyze(apk_path, static.package_name)
 
-            yield PipelineEvent(stage="llm_analysis", status="running", progress=60)
-            llm = self.llm_analyzer.analyze(static, dynamic)
+            yield PipelineEvent(stage="risk_scoring", status="running", progress=60)
+            dataset_features = extract_from_apk(apk_path)
+            
+            fallback_llm = (
+                self.llm_analyzer._get_fallback_features()
+            )
 
-            yield PipelineEvent(stage="risk_scoring", status="running", progress=80)
-            score = self.risk_scorer.score(static, dynamic, llm)
+            score = self.risk_scorer.score(
+                static,
+                dynamic,
+                fallback_llm,
+                dataset_features,
+                yara_result
+            )
+
+            if score.composite_score > 40:
+
+                yield PipelineEvent(
+                    stage="llm_analysis",
+                    status="running",
+                    progress=80
+                )
+
+                llm = self.llm_analyzer.analyze(
+                    static,
+                    dynamic
+                )
+
+                score = self.risk_scorer.score(
+                    static,
+                    dynamic,
+                    llm,
+                    dataset_features,
+                    yara_result
+                )
+            else:
+
+                yield PipelineEvent(
+                    stage="llm_skipped",
+                    status="done",
+                    progress=80
+                )
+
+                llm = fallback_llm
+
 
             yield PipelineEvent(stage="report_generation", status="running", progress=90)
-            report = self.report_generator.generate(static, dynamic, llm, score)
+            report = self.report_generator.generate(static, dynamic, llm, score, yara_result,mitre_findings,family)
 
             result = AnalysisResult(
                 apk_hash=static.apk_hash,
@@ -97,11 +223,14 @@ class PipelineOrchestrator:
                 llm=dataclasses.asdict(llm),
                 score=dataclasses.asdict(score),
                 report=dataclasses.asdict(report),
-                total_duration_ms=int((time.time() - t0) * 1000)
+                total_duration_ms=int((time.time() - t0) * 1000),
+                mitre=dataclasses.asdict(mitre_findings),
+                family=dataclasses.asdict(family),
+                yara=dataclasses.asdict(yara_result)
             )
 
             # We will wire up FeatureStore and AuditLogger in Module 9
-            self.feature_store.cache(static.apk_hash, result)
+            self.feature_store.cache(static.apk_hash, result, config.MODEL_VERSION)
             self.audit_logger.log(result)
 
             yield PipelineEvent(stage="complete", status="done", progress=100, result=result)

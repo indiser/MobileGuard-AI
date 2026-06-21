@@ -1,5 +1,7 @@
 import json
 from datetime import datetime
+from backend import config
+import os
 
 _SQLALCHEMY_AVAILABLE = False
 try:
@@ -27,15 +29,20 @@ else:
     AnalysisCache = None  # type: ignore
 
 class FeatureStore:
-    def __init__(self, db_path="sqlite:///data/feature_cache.sqlite"):
+    def __init__(self, db_path=f"sqlite:///{config.FEATURE_CACHE_DB}"):
         self.Session = None
         if not _SQLALCHEMY_AVAILABLE:
             print("Warning: SQLAlchemy not installed. FeatureStore disabled.")
             return
         try:
             if db_path.startswith("sqlite:///"):
-                import os
-                os.makedirs("data", exist_ok=True)
+                db_dir = os.path.dirname(
+                    config.FEATURE_CACHE_DB
+                )
+                os.makedirs(
+                    db_dir,
+                    exist_ok=True
+                )
             self.engine = create_engine(db_path)
             Base.metadata.create_all(self.engine)
             self.Session = sessionmaker(bind=self.engine)
@@ -43,18 +50,18 @@ class FeatureStore:
             print(f"Warning: Failed to init FeatureStore DB: {e}")
             self.Session = None
 
-    def get(self, apk_hash: str):
+    def get(self, apk_hash: str, model_version=config.MODEL_VERSION):
         if not self.Session: return None
         session = self.Session()
         try:
-            record = session.query(AnalysisCache).filter_by(apk_hash=apk_hash).first()
+            record = session.query(AnalysisCache).filter_by(apk_hash=apk_hash, model_version=model_version).first()
             if record:
                 return json.loads(record.full_result_json)
         finally:
             session.close()
         return None
 
-    def cache(self, apk_hash: str, result):
+    def cache(self, apk_hash: str, result, model_version=config.MODEL_VERSION):
         if not self.Session: return
         session = self.Session()
         try:
@@ -68,7 +75,7 @@ class FeatureStore:
                 composite_score=score,
                 action=action,
                 full_result_json=json.dumps(res_dict),
-                model_version="1.0"
+                model_version=model_version
             )
             session.merge(record)
             session.commit()

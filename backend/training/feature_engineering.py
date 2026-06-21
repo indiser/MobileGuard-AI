@@ -14,7 +14,24 @@ except ImportError:
 
 def engineer_features(df, target_col='label'):
     # numeric_only=True avoids the pandas FutureWarning / TypeError on mixed-type DataFrames
-    df.fillna(df.median(numeric_only=True), inplace=True)
+    numeric_cols = df.select_dtypes(
+        include=["number"]
+    ).columns
+
+    for col in numeric_cols:
+        df[col].fillna(
+            df[col].median(),
+            inplace=True
+        )
+
+    df.replace({
+        True: 1,
+        False: 0,
+        "true": 1,
+        "false": 0,
+        "yes": 1,
+        "no": 0
+    }, inplace=True)
     
     missing_ratio = df.isnull().mean()
     to_drop = missing_ratio[missing_ratio > 0.4].index

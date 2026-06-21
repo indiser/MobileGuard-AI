@@ -1,9 +1,10 @@
 import json
 import datetime
 import os
+from backend import config
 
 class AuditLogger:
-    def __init__(self, log_dir="data"):
+    def __init__(self, log_dir=config.DATA_DIR):
         self.log_dir = log_dir
         os.makedirs(self.log_dir, exist_ok=True)
         
@@ -26,7 +27,7 @@ class AuditLogger:
             "pipeline_duration_ms": res_dict.get('total_duration_ms', 0),
             "sandbox_mode": res_dict.get('dynamic', {}).get('sandbox_mode', 'unknown'),
             "llm_available": res_dict.get('llm', {}).get('llm_available', False),
-            "ip_address": "127.0.0.1",
+            "ip_address": None,
             "error": None
         }
         

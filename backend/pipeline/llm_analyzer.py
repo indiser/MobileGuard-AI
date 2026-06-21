@@ -3,6 +3,7 @@ import json
 from dataclasses import dataclass, field
 from typing import List
 import google.generativeai as genai
+import traceback
 
 try:
     from backend import config
@@ -43,9 +44,11 @@ class LLMFeatures:
 class LLMAnalyzer:
     def __init__(self, api_key: str = None, model: str = None):
         _api_key_default = getattr(config, 'GEMINI_API_KEY', '') if config else ''
-        _model_default = getattr(config, 'LLM_MODEL', 'gemini-1.5-pro') if config else 'gemini-1.5-pro'
+        _model_default = getattr(config, 'LLM_MODEL', 'gemini-2.0-flash') if config else 'gemini-1.5-flash'
         self.api_key = api_key or _api_key_default
         self.model_name = model or _model_default
+        print("Gemini key loaded:", bool(self.api_key))
+        print("Using model:", self.model_name)
         if self.api_key:
             genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel(self.model_name)
@@ -55,12 +58,12 @@ class LLMAnalyzer:
     def analyze(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures') -> LLMFeatures:
         t0 = time.time()
         
-        if not self.model:
+        if self.model is None:
             print("Warning: LLM analysis unavailable (no API key), using static signals only")
             return self._get_fallback_features()
 
         # Step 1: Class Selection (mocked decompiled code for the prompt)
-        formatted_class_code = "// Decompiled code snippet placeholder\nclass MainActivity {\n  void onReceive() { ... }\n}"
+        formatted_class_code = static.decompiled_code
 
         # Step 2: Analysis Prompt
         system_prompt = """
@@ -422,21 +425,21 @@ If evidence is absent, explicitly state that evidence is insufficient.
 SCORING GUIDANCE
 --------------------------------------------------
 
-Severity Score (0-100):
+Severity Score (0.0-1.0):
 
-0-20:
+0-0.2:
 Likely benign
 
-21-40:
+0.21-0.4:
 Low risk
 
-41-60:
+0.41-0.6:
 Suspicious
 
-61-80:
+0.61-0.8:
 High risk
 
-81-100:
+0.81-1.0:
 Critical threat
 
 Confidence (0.0-1.0):
@@ -540,7 +543,7 @@ The JSON must exactly match this schema:
         }}
     ],
 
-    "severity_score": 0,
+    "severity_score": 0.0,
 
     "confidence": 0.0,
 
@@ -562,8 +565,13 @@ The JSON must exactly match this schema:
 
         try:
             full_prompt = system_prompt + "\n\n" + user_prompt
+            print("===== LLM ANALYSIS START =====")
             response = self.model.generate_content(full_prompt)
             response_text = response.text
+
+            print("===== RAW GEMINI RESPONSE =====")
+            print(response.text[:3000])
+            print("===== END RESPONSE =====")
             
             # extract JSON
             if "{" in response_text and "}" in response_text:
@@ -604,6 +612,8 @@ The JSON must exactly match this schema:
                     features.zero_day_hypotheses = json.loads(hyp_json_str)
 
         except Exception as e:
+            print("===== LLM FAILURE =====")
+            print(traceback.format_exc())
             print(f"Warning: LLM analysis failed: {str(e)}")
             features = self._get_fallback_features()
 

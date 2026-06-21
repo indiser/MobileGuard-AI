@@ -8,10 +8,11 @@ from typing import List, Dict, Any, Tuple
 from collections import Counter
 import math
 import re
+from urllib.parse import urlparse
 from fastapi import HTTPException
 import magic
 from androguard.misc import AnalyzeAPK
-
+from backend.data.threat_intel import ThreatIntel
 # Suppress androguard's "Requested API level X is larger than maximum" warning
 logging.getLogger("androguard.core.apk").setLevel(logging.ERROR)
 logging.getLogger("androguard").setLevel(logging.ERROR)
@@ -41,8 +42,11 @@ class StaticFeatures:
     graph_node_count: int
     graph_edge_count: int
     min_sdk: int
+    decompiled_code: str
     target_sdk: int
     analysis_duration_ms: int
+    vt_malicious_count: int
+    vt_suspicious_count: int
 
 DANGEROUS_PERMISSIONS = {
     'READ_SMS': 5, 'RECEIVE_SMS': 5, 'SEND_SMS': 5,
@@ -57,6 +61,24 @@ DANGEROUS_PERMISSIONS = {
     'ACCESS_FINE_LOCATION': 3, 'INTERNET': 1,
     'NFC': 3, 'USE_BIOMETRIC': 3
 }
+
+IGNORE_APIS = [
+    "kotlin/jvm/internal/Intrinsics",
+    "java/lang/Object",
+    "java/lang/StringBuilder",
+    "androidx/",
+    "kotlinx/",
+    "java/util/",
+    "java/lang/",
+    "java/io/",
+    "java/net/",
+    "android/view/",
+    "android/widget/",
+    "android/content/",
+    "android/util/",
+    "android/graphics/",
+    "android/os/",
+]
 
 SUSPICIOUS_API_PATTERNS = [
     'sendTextMessage', 'getSubscriberId', 'getDeviceId', 'getImei',
@@ -86,9 +108,18 @@ def shannon_entropy(s: str) -> float:
     length = len(s)
     return -sum((count / length) * math.log2(count / length) for count in freq.values())
 
+def extract_domain(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        return parsed.netloc.lower()
+    except Exception:
+        return ""
+
+decompiled_code = ""
+
 class StaticAnalyzer:
     def __init__(self):
-        pass
+        self.intel = ThreatIntel()
 
     def analyze(self, apk_path: str) -> StaticFeatures:
         t0 = time.time()
@@ -121,6 +152,16 @@ class StaticAnalyzer:
         
         try:
             apk, dex, analysis = AnalyzeAPK(apk_path)
+            code_chunks = []
+            if dex:
+                for cls in dex:
+                    try:
+                        src = cls.get_source()
+                        if src:
+                            code_chunks.append(src)
+                    except:
+                        pass
+            decompiled_code = "\n".join(code_chunks[:20])
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Failed to parse APK: {str(e)}")
             
@@ -175,6 +216,7 @@ class StaticAnalyzer:
         permission_danger_score = min(100.0, (sum(perm_weights) + combo_bonuses) / max(1, theoretical_max) * 100.0)
         
         G = nx.DiGraph()
+        suspicious_api_hits = set()
         suspicious_api_count = 0
         in_degrees = Counter()
         
@@ -196,15 +238,49 @@ class StaticAnalyzer:
                             c_name = str(callee)
                         
                         G.add_edge(m_name, c_name)
-                        in_degrees[c_name] += 1
+
+                        if any(
+                            c_name.startswith(x)
+                            for x in [
+                                "Ljava/lang/",
+                                "Ljava/util/",
+                                "Ljava/io/",
+                                "Ljava/net/",
+                                "Landroidx/",
+                                "Lkotlin/"
+                            ]
+                        ):
+                            continue
+                        
+                        if not any(x in c_name for x in IGNORE_APIS):
+                            in_degrees[c_name] += 1
+                        
+                        if c_name.startswith("Ljava/lang/"):
+                            continue
+
+                        if c_name.startswith("Ljava/util/"):
+                            continue
+                        
                         
                         for pat in SUSPICIOUS_API_PATTERNS:
+                            if any(x in c_name for x in IGNORE_APIS):
+                                continue
                             if pat in c_name:
-                                suspicious_api_count += 1
+                                suspicious_api_hits.add(
+                                    c_name
+                                )
                 except Exception:
                     continue
                     
-        api_suspicion_score = min(100.0, suspicious_api_count * 8.0)
+        suspicious_api_count = len(
+            suspicious_api_hits
+        )
+
+        api_suspicion_score = min(
+            100.0,
+            suspicious_api_count * 8.0
+        )
+        
         top_apis = [k for k, v in in_degrees.most_common(10)]
         
         graph_node_count = G.number_of_nodes()
@@ -219,7 +295,48 @@ class StaticAnalyzer:
         high_entropy_count = len(high_entropy_strings)
         
         suspicious_urls = []
+        for s in strings:
+            if type(s) != str:
+                continue
+
+            match = URL_PATTERN.search(s)
+
+            if match:
+                suspicious_urls.append(match.group(0))
+        
         c2_hit_count = 0
+        intel = self.intel
+
+        vt_result = intel.query_virustotal_hash(
+            apk_hash
+        )
+
+        vt_malicious_count = 0
+        vt_suspicious_count = 0
+
+        if vt_result:
+            try:
+                stats = vt_result["data"]["attributes"]["last_analysis_stats"]
+
+                vt_malicious_count = stats.get(
+                    "malicious",
+                    0
+                )
+
+                vt_suspicious_count = stats.get(
+                    "suspicious",
+                    0
+                )
+
+            except Exception:
+                pass
+
+        for url in suspicious_urls:
+            domain = extract_domain(url)
+
+            if intel.is_malicious_domain(domain):
+                c2_hit_count += 1
+
         
         for s in strings:
             if type(s) != str: continue
@@ -232,6 +349,10 @@ class StaticAnalyzer:
         # are high-entropy. The previous value of 200 caused legitimate apps to
         # hit 100 when just 0.5% of their strings were high-entropy.
         obfuscation_score = min(100.0, (high_entropy_count / max(len(strings), 1)) * 100.0)
+
+        suspicious_urls = list(
+            set(suspicious_urls)
+        )
         
         is_self_signed = False
         cert_trust_score = 100.0
@@ -297,6 +418,7 @@ class StaticAnalyzer:
             permission_list=clean_perms,
             permission_danger_score=permission_danger_score,
             permission_count=len(clean_perms),
+            decompiled_code=decompiled_code[:20000],
             dangerous_permission_count=dangerous_permission_count,
             suspicious_api_count=suspicious_api_count,
             api_suspicion_score=api_suspicion_score,
@@ -316,7 +438,9 @@ class StaticAnalyzer:
             graph_edge_count=graph_edge_count,
             min_sdk=min_sdk,
             target_sdk=target_sdk,
-            analysis_duration_ms=analysis_duration_ms
+            analysis_duration_ms=analysis_duration_ms,
+            vt_malicious_count=vt_malicious_count,
+            vt_suspicious_count=vt_suspicious_count
         )
 
 if __name__ == "__main__":

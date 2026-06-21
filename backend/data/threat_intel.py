@@ -1,8 +1,11 @@
 import json
 import os
+from backend import config
+import requests
+
 
 class ThreatIntel:
-    def __init__(self, ioc_path="data/certin_iocs.json", c2_path="data/c2_ips.txt"):
+    def __init__(self, ioc_path=config.CERTINTEL_IOC_PATH, c2_path=config.C2_BLOCKLIST_PATH):
         self.ioc_path = ioc_path
         self.c2_path = c2_path
         self.iocs = {
@@ -13,6 +16,7 @@ class ThreatIntel:
         }
         self.c2_blocklist = set()
         self._load_data()
+        self.vt_cache = {}
 
     def _load_data(self):
         if os.path.exists(self.ioc_path):
@@ -40,3 +44,41 @@ class ThreatIntel:
         
     def is_malicious_package(self, pkg: str) -> bool:
         return pkg in self.iocs["malicious_package_names"]
+    
+    def query_virustotal_hash(self, sha256):
+        api_key = config.VIRUSTOTAL_API_KEY
+
+        if sha256 in self.vt_cache:
+            return self.vt_cache[sha256]
+
+        if not api_key:
+            return None
+
+        url = f"https://www.virustotal.com/api/v3/files/{sha256}"
+
+        headers = {
+            "x-apikey": api_key
+        }
+
+        try:
+            r = requests.get(
+                url,
+                headers=headers,
+                timeout=5
+            )
+            if r.status_code == 429:
+                print("VirusTotal quota exceeded")
+                return None
+
+            if r.status_code == 403:
+                print("VirusTotal API key invalid")
+                return None
+            
+            if r.status_code == 200:
+                self.vt_cache[sha256] = r.json()
+                return r.json()
+
+        except Exception:
+            pass
+
+        return None

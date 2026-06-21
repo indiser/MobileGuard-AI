@@ -1,28 +1,27 @@
+from pathlib import Path
+from dotenv import load_dotenv
 import os
 
-# API Keys
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+load_dotenv()
 
-# App Configuration
-MAX_APK_SIZE_MB = int(os.getenv("MAX_APK_SIZE_MB", 150))
-SANDBOX_TIMEOUT_SECS = int(os.getenv("SANDBOX_TIMEOUT_SECS", 90))
-USE_LIVE_SANDBOX = os.getenv("USE_LIVE_SANDBOX", "false").lower() == "true"
+BASE_DIR = Path(__file__).resolve().parent
 
-# LLM Configuration
-LLM_MODEL = "gemini-2.0-flash"
-LLM_MAX_TOKENS = 2048
+DATA_DIR = BASE_DIR / "data"
+MODEL_DIR = BASE_DIR / "models"
 
-# Risk Scoring
-RISK_THRESHOLDS = {
-    "LOW": 25,
-    "MEDIUM": 50,
-    "HIGH": 75
-}
+DATA_DIR.mkdir(exist_ok=True)
+MODEL_DIR.mkdir(exist_ok=True)
 
-# File Paths
-FEATURE_CACHE_DB = "./data/feature_cache.sqlite"
-AUDIT_LOG_PATH = "./data/audit.jsonl"
-MODEL_PATH = "./models/xgboost_mobileguard.json"
-CERTINTEL_IOC_PATH = "./data/certin_iocs.json"
-C2_BLOCKLIST_PATH = "./data/c2_ips.txt"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+VIRUSTOTAL_API_KEY = os.environ.get("VIRUSTOTAL_API_KEY", "")
+
+FEATURE_CACHE_DB = str(DATA_DIR / "feature_cache.sqlite")
+AUDIT_LOG_PATH = str(DATA_DIR / "audit.jsonl")
+
+MODEL_PATH = str(MODEL_DIR / "xgboost_mobileguard.json")
+
+CERTINTEL_IOC_PATH = str(DATA_DIR / "certin_iocs.json")
+C2_BLOCKLIST_PATH = str(DATA_DIR / "c2_ips.txt")
+
+MODEL_VERSION = "1.1"
+PIPELINE_VERSION = "1.0"

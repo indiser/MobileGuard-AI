@@ -349,3 +349,5 @@ exports/
 !requirements.txt
 !package.json
 !package-lock.json
+
+data/vt_cache.json

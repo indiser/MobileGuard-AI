@@ -25,7 +25,7 @@ class ThreatReport:
     report_generated_at: str        # ISO 8601 timestamp
 
 class ReportGenerator:
-    def generate(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures', llm: 'LLMFeatures', score: 'RiskScore') -> ThreatReport:
+    def generate(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures', llm: 'LLMFeatures', score: 'RiskScore', yara_result, mitre_findings, family_result) -> ThreatReport:
         
         indicators = []
         if static.c2_hit_count > 0:
@@ -56,13 +56,62 @@ class ReportGenerator:
             "TECHNICAL FINDINGS:",
             f"  - Permission Analysis: {static.dangerous_permission_count} dangerous permissions requested.",
             f"  - Code Behaviour: {llm.primary_function}. " + (" ".join(llm.malicious_behaviors) if llm.malicious_behaviors else "No specific malicious behavior cited by LLM."),
-            f"  - Network Activity: Contacted {len(dynamic.network_domains_contacted)} domains. C2 hits: {dynamic.c2_domains_hit}.",
-            f"  - Obfuscation: {static.high_entropy_count} high entropy strings detected (Score: {static.obfuscation_score:.1f})."
         ]
+
+        report_lines.append(
+            f"ML MALWARE PROBABILITY: {score.ml_score:.2f}%"
+        )
+
+        report_lines.append(
+            f"VIRUSTOTAL: "
+            f"{static.vt_malicious_count} malicious, "
+            f"{static.vt_suspicious_count} suspicious"
+        )
+
+        report_lines.append("")
+        report_lines.append("YARA MATCHES:")
+
+        for rule in yara_result.matched_families:
+            report_lines.append(f"  - {rule}")
+
+        report_lines.append("")
+        report_lines.append("MALWARE FAMILY:")
+        report_lines.append(
+            f"  {family_result.family}"
+        )
+
+        report_lines.append("")
+        report_lines.append("MITRE ATT&CK MOBILE:")
+        for t in mitre_findings.techniques:
+            report_lines.append(
+                f"  - {t.technique_id}: {t.name}"
+            )
+        
+        if dynamic.sandbox_mode == "emulated":
+            report_lines.append(
+                "  - Network Activity: Dynamic analysis unavailable (emulated mode)."
+            )
+        else:
+            report_lines.append(
+                f"  - Network Activity: Contacted {len(dynamic.network_domains_contacted)} domains. C2 hits: {dynamic.c2_domains_hit}."
+            )
+
+        report_lines.append(
+            f"  - Obfuscation: {static.high_entropy_count} high entropy strings detected (Score: {static.obfuscation_score:.1f})."
+        )
         
         if india_risk:
             report_lines.append(f"INDIA-SPECIFIC THREAT: {', '.join(llm.india_specific_risks) if llm.india_specific_risks else 'Potential UPI/OTP overlay risks identified.'}")
             
+        report_lines.append(
+            "TOP ML FEATURES:"
+        )
+
+        for feat, importance in score.shap_top_features:
+            report_lines.append(
+                f"  - {feat}: {importance:.3f}"
+            )
+    
         report_lines.append("RECOMMENDED ACTIONS:")
         
         if score.action == "BLOCK":
@@ -84,6 +133,8 @@ class ReportGenerator:
             report_lines.append(f"  * {ind}")
             
         full_report = "\n".join(report_lines)
+
+        cert_intel_hit = static.c2_hit_count > 0 or dynamic.c2_domains_hit > 0 or static.vt_malicious_count > 0
         
         return ThreatReport(
             verdict=score.action,
@@ -94,7 +145,7 @@ class ReportGenerator:
             forensic_indicators=forensic_indicators,
             shap_explanation=score.shap_explanation,
             india_risk_flag=india_risk,
-            certintel_flag=False, 
-            malware_family=dynamic.matched_malware_family,
+            certintel_flag=cert_intel_hit,
+            malware_family=family_result.family,
             report_generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
         )

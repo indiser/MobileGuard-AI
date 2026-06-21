@@ -7,6 +7,7 @@ try:
     from backend.pipeline.orchestrator import PipelineOrchestrator
     from backend.data.feature_store import FeatureStore
     from backend.data.audit_logger import AuditLogger
+    from backend import config
 except ImportError:
     PipelineOrchestrator = None
     FeatureStore = None
@@ -31,11 +32,21 @@ audit_logger = AuditLogger() if AuditLogger else None
 
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "ok", 
-        "version": "1.0.0",
-        "model_loaded": orchestrator.risk_scorer.xgb_model is not None if orchestrator else False,
-        "sandbox_available": orchestrator.dynamic_analyzer.use_live_sandbox if orchestrator else False
+        return {
+        "status":"ok",
+        "version":"1.0.0",
+        "model_loaded": (
+            orchestrator is not None and
+            orchestrator.risk_scorer.xgb_model is not None
+        ),
+        "llm_available": (
+            orchestrator is not None and
+            orchestrator.llm_analyzer.model is not None
+        ),
+        "sandbox_available": (
+            orchestrator is not None and
+            orchestrator.dynamic_analyzer.use_live_sandbox
+        )
     }
 
 @app.post("/analyze")
@@ -80,3 +91,14 @@ async def delete_cache(apk_hash: str):
         raise HTTPException(status_code=503, detail="Cache unavailable")
     feature_store.delete(apk_hash)
     return {"status": "ok"}
+
+@app.get("/model/metrics")
+async def model_metrics():
+
+    path = config.MODEL_DIR / "model_metrics.json"
+
+    if not path.exists():
+        return {"error": "metrics missing"}
+
+    with open(path) as f:
+        return json.load(f)

@@ -10,7 +10,7 @@ import os
 # Resolve models/ dir relative to this file so the SHAP plot saves correctly
 # regardless of the working directory.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_MODELS_DIR = os.path.normpath(os.path.join(_THIS_DIR, "models"))
+_MODELS_DIR = os.path.normpath(os.path.join(_THIS_DIR, "..", "models"))
 
 def evaluate_model(model, X_test, y_test, feature_columns):
     try:

@@ -4,9 +4,9 @@ androguard==3.3.5
 python-multipart==0.0.9
 xgboost==2.0.3
 scikit-learn==1.5.0
-shap==0.45.1
+shap
 google-generativeai==0.5.4
-pydantic==2.7.1
+pydantic
 sqlalchemy==2.0.30
 aiofiles==23.2.1
 python-magic==0.4.27
@@ -15,3 +15,6 @@ numpy==1.26.4
 pandas==2.2.2
 pytest==8.2.2
 httpx==0.27.0
+python-dotenv
+lxml
+yara-python
