@@ -190,6 +190,19 @@ class RiskScorer:
         if dynamic.silent_install_attempted:
             composite = min(100.0, composite + 15)
             boost_rules_applied.append("Silent install attempted (+15)")
+        
+        if dynamic.root_detected:
+            composite = min(100.0, composite + 15)
+            boost_rules_applied.append("Root activity detected (+15)")
+
+        if dynamic.shell_executed:
+            composite = min(100.0, composite + 10)
+            boost_rules_applied.append("Shell execution detected (+10)")
+
+        if dynamic.dynamic_code_loaded:
+            composite = min(100.0, composite + 10)
+            boost_rules_applied.append("Dynamic code loading detected (+10)")
+
         # NOTE: self-signed cert is already penalised via the developer_trust dimension
         # score (100 - cert_trust_score). Adding a second boost on top would double-count
         # it and unfairly inflate scores for legitimate personal/dev APKs.

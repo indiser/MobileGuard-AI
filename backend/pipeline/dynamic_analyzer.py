@@ -20,6 +20,11 @@ from pathlib import Path
 from typing import Optional
 
 from backend.pipeline.behavior_scorer import score_behavior
+from backend.pipeline.runtime_collectors import (
+    CollectorOrchestrator
+)
+from backend.pipeline.runtime_events import BehaviorEvent
+from backend.pipeline.event_mapper import EventMapper
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +51,16 @@ class DynamicFeatures:
     matched_malware_family: str             # e.g. "BankBot", "Unknown"
     family_similarity_score: float          # 0.0–1.0
     analysis_duration_ms: int
+    runtime_events: list = field(
+        default_factory=list
+    )
+    mapping_summary: dict = field(
+        default_factory=dict
+    )
+    root_detected: bool = False
+    shell_executed: bool = False
+    dynamic_code_loaded: bool = False
+    icon_hidden: bool = False
 
 
 @dataclass
@@ -176,6 +191,21 @@ def _check_adb_device() -> bool:
     )
 
 
+def _get_first_device():
+
+    result = subprocess.run(
+        ["adb", "devices"],
+        capture_output=True,
+        text=True
+    )
+
+    for line in result.stdout.splitlines()[1:]:
+
+        if "\tdevice" in line:
+            return line.split()[0]
+
+    return None
+
 # ---------------------------------------------------------------------------
 # Main analyser
 # ---------------------------------------------------------------------------
@@ -204,10 +234,10 @@ class DynamicAnalyzer:
     ) -> None:
         self.monkey_event_count = monkey_event_count
         self.interaction_timeout = interaction_timeout
-        
 
         if use_live_sandbox:
-            if _check_adb_device():
+            self.device_id = _get_first_device()
+            if self.device_id:
                 self.use_live_sandbox = True
                 log.info("Live sandbox mode enabled.")
             else:
@@ -292,11 +322,48 @@ class DynamicAnalyzer:
             package_name
         )
 
+        collector = CollectorOrchestrator(
+            package=package_name,
+            device_id=self.device_id
+        )
+
+        collector_result = collector.collect_all(
+            timeout_per_collector=15
+        )
+
+        if collector_result.errors:
+            log.warning(
+                "Collector failures: %s",
+                collector_result.errors
+            )
+        
+        for e in collector_result.events:
+            log.info(
+                "[%s] %s",
+                e.source,
+                e.event_type.value
+            )
+
+        events = collector_result.events
+
         features = self._signals_to_features(
             signals,
             sandbox_mode="live"
         )
+
+        features, mapping_summary = (
+            EventMapper.apply(
+                events,
+                features
+            )
+        )
+
+        features.mapping_summary = mapping_summary.__dict__
+
+        features.runtime_events = events
+
         features.behavioural_anomaly_score = score_behavior(features)
+
         features.accessibility_service_abused = (
             features.accessibility_service_abused
             or runtime["accessibility"]
@@ -313,7 +380,7 @@ class DynamicAnalyzer:
         log.debug("Installing %s …", apk_path)
         try:
             subprocess.run(
-                ["adb", "install", "-r", str(apk_path)],
+                ["adb", "-s", self.device_id, "install", "-r", str(apk_path)],
                 check=True,
                 capture_output=True,
                 timeout=30,
@@ -330,9 +397,9 @@ class DynamicAnalyzer:
         """Start a background logcat process and return the handle."""
         log.debug("Starting logcat capture …")
         # Clear the buffer first so we only capture events from this run.
-        subprocess.run(["adb", "logcat", "-c"], capture_output=True)
+        subprocess.run(["adb", "-s", self.device_id, "logcat", "-c"], capture_output=True)
         return subprocess.Popen(
-            ["adb", "logcat", "-v", "time"],
+            ["adb","-s", self.device_id ,"logcat", "-v", "time"],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -348,7 +415,7 @@ class DynamicAnalyzer:
         try:
             subprocess.run(
                 [
-                    "adb", "shell", "monkey",
+                    "adb", "-s", self.device_id, "shell", "monkey",
                     "-p", package_name,
                     "--throttle", "200",
                     "--ignore-crashes",
@@ -367,7 +434,7 @@ class DynamicAnalyzer:
     def _uninstall_apk(self, package_name: str) -> None:
         log.debug("Uninstalling %s …", package_name)
         subprocess.run(
-            ["adb", "uninstall", package_name],
+            ["adb", "-s", self.device_id, "uninstall", package_name],
             capture_output=True,
             timeout=15,
         )

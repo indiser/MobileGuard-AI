@@ -21,6 +21,7 @@ except ImportError:
     
 try:
     from backend.pipeline.dynamic_analyzer import DynamicFeatures
+    from backend.pipeline.resilient_router import ResilientLLMRouter
 except ImportError:
     pass
 
@@ -54,6 +55,7 @@ class LLMAnalyzer:
             self.model = genai.GenerativeModel(self.model_name)
         else:
             self.model = None
+        self.router = ResilientLLMRouter()
 
     def analyze(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures') -> LLMFeatures:
         t0 = time.time()
@@ -368,6 +370,19 @@ Similarity Score:
 {dynamic.family_similarity_score:.0%}
 
 --------------------------------------------------
+RUNTIME ANALYSIS
+--------------------------------------------------
+
+Runtime Events:
+{[e.event_type.value for e in dynamic.runtime_events[:50]]}
+
+Behaviour Score:
+{dynamic.behavioural_anomaly_score}
+
+Collector Summary:
+{dynamic.mapping_summary}
+
+--------------------------------------------------
 DECOMPILED SOURCE CODE
 --------------------------------------------------
 
@@ -564,21 +579,16 @@ The JSON must exactly match this schema:
 """
 
         try:
-            full_prompt = system_prompt + "\n\n" + user_prompt
-            print("===== LLM ANALYSIS START =====")
-            response = self.model.generate_content(full_prompt)
-            response_text = response.text
-
-            print("===== RAW GEMINI RESPONSE =====")
-            print(response.text[:3000])
-            print("===== END RESPONSE =====")
+            print("===== ROUTING TO RESILIENT LLM INFRASTRUCTURE =====")
             
-            # extract JSON
-            if "{" in response_text and "}" in response_text:
-                json_str = response_text[response_text.find("{"):response_text.rfind("}")+1]
-                data = json.loads(json_str)
-            else:
-                raise ValueError("No JSON found in response")
+            data = self.router.analyze_malware(
+                system_prompt=system_prompt,
+                user_prompt_template=user_prompt, # Remove decompiled_code from your user_prompt string definition
+                decompiled_code=static.decompiled_code 
+            )
+            
+            if not data:
+                raise ValueError("Router returned empty JSON dictionary.")
 
             features = LLMFeatures(
                 primary_function=data.get("primary_function", ""),

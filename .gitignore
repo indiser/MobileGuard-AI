@@ -31,6 +31,7 @@ ENV/
 .venv/
 backend/venv/
 backend/env/
+samples/
 
 # Python Cache
 __pycache__/
@@ -351,3 +352,4 @@ exports/
 !package-lock.json
 
 data/vt_cache.json
+*.apk

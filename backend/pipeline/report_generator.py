@@ -111,7 +111,38 @@ class ReportGenerator:
             report_lines.append(
                 f"  - {feat}: {importance:.3f}"
             )
-    
+
+        report_lines.append("")
+        report_lines.append("RUNTIME EVENTS:")
+
+        for event in dynamic.runtime_events:
+
+            report_lines.append(
+                f"  - {event.event_type.value}"
+            )
+
+            report_lines.append(
+                f"      Evidence: {event.raw_evidence[:150]}"
+            )
+
+            report_lines.append(
+                f"      Confidence: {event.confidence:.2f}"
+            )
+
+            report_lines.append(
+                f"      Source: {event.source}"
+            )
+
+            report_lines.append(
+                f"      Timestamp: {event.timestamp}"
+            )
+
+            if event.mitre_technique:
+
+                report_lines.append(
+                    f"      MITRE: {event.mitre_technique}"
+                )
+
         report_lines.append("RECOMMENDED ACTIONS:")
         
         if score.action == "BLOCK":

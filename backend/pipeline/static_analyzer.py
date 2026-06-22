@@ -2,7 +2,6 @@ import hashlib
 import time
 import os
 import logging
-import networkx as nx
 from dataclasses import dataclass
 from typing import List, Dict, Any, Tuple
 from collections import Counter
@@ -215,10 +214,11 @@ class StaticAnalyzer:
         theoretical_max = sum(DANGEROUS_PERMISSIONS.values()) + 47
         permission_danger_score = min(100.0, (sum(perm_weights) + combo_bonuses) / max(1, theoretical_max) * 100.0)
         
-        G = nx.DiGraph()
         suspicious_api_hits = set()
         suspicious_api_count = 0
         in_degrees = Counter()
+        unique_nodes = set()
+        unique_edges = set()
         
         if analysis:
             for method in analysis.get_methods():
@@ -227,9 +227,10 @@ class StaticAnalyzer:
                     m_name = m.get_class_name() + "->" + m.get_name()
                 except Exception:
                     m_name = str(method)
+                    
+                unique_nodes.add(m_name)
+
                 try:
-                    # androguard 3.x: get_xref_to() yields (classobj, MethodAnalysis, offset)
-                    # The second element IS the MethodAnalysis for the callee — no extra .get_method() needed.
                     for _, callee, _ in method.get_xref_to():
                         try:
                             cm = callee.get_method()
@@ -237,38 +238,19 @@ class StaticAnalyzer:
                         except Exception:
                             c_name = str(callee)
                         
-                        G.add_edge(m_name, c_name)
+                        unique_nodes.add(c_name)
+                        unique_edges.add((m_name, c_name))
 
-                        if any(
-                            c_name.startswith(x)
-                            for x in [
-                                "Ljava/lang/",
-                                "Ljava/util/",
-                                "Ljava/io/",
-                                "Ljava/net/",
-                                "Landroidx/",
-                                "Lkotlin/"
-                            ]
-                        ):
+                        # Fast check using tuples instead of list iteration
+                        if c_name.startswith(("Ljava/lang/", "Ljava/util/", "Ljava/io/", "Ljava/net/", "Landroidx/", "Lkotlin/")):
                             continue
                         
-                        if not any(x in c_name for x in IGNORE_APIS):
-                            in_degrees[c_name] += 1
-                        
-                        if c_name.startswith("Ljava/lang/"):
-                            continue
-
-                        if c_name.startswith("Ljava/util/"):
-                            continue
-                        
+                        in_degrees[c_name] += 1
                         
                         for pat in SUSPICIOUS_API_PATTERNS:
-                            if any(x in c_name for x in IGNORE_APIS):
-                                continue
                             if pat in c_name:
-                                suspicious_api_hits.add(
-                                    c_name
-                                )
+                                suspicious_api_hits.add(c_name)
+                                break # Move to next c_name once flagged
                 except Exception:
                     continue
                     
@@ -283,16 +265,24 @@ class StaticAnalyzer:
         
         top_apis = [k for k, v in in_degrees.most_common(10)]
         
-        graph_node_count = G.number_of_nodes()
-        graph_edge_count = G.number_of_edges()
-        graph_density = nx.density(G) if graph_node_count > 1 else 0.0
+        graph_node_count = len(unique_nodes)
+        graph_edge_count = len(unique_edges)
+
+        if graph_node_count > 1:
+            graph_density = graph_edge_count / (graph_node_count * (graph_node_count - 1))
+        else:
+            graph_density = 0.0
         
         strings = []
         if analysis:
-            strings = [s.get_value() for s in analysis.get_strings()]
-            
-        high_entropy_strings = [s for s in strings if type(s) == str and shannon_entropy(s) > 4.5]
+            strings = [s.get_value() for s in analysis.get_strings() if type(s.get_value()) == str]
+        
+        high_entropy_strings = [
+            s for s in strings 
+            if 20 < len(s) < 10000 and shannon_entropy(s) > 4.5
+        ]
         high_entropy_count = len(high_entropy_strings)
+            
         
         suspicious_urls = []
         for s in strings:
