@@ -41,19 +41,24 @@
 
 ## 🔍 Overview
 
-MobileGuard AI is an enterprise-grade Android malware detection system designed for financial institutions, security operations centers (SOCs), and cybersecurity agencies. It provides comprehensive threat analysis through a five-stage pipeline:
+MobileGuard AI is an enterprise-grade Android malware detection system designed for financial institutions, security operations centers (SOCs), and cybersecurity agencies. It provides comprehensive threat analysis through a **7-stage pipeline**:
 
 1. **Static Analysis** - APK decompilation, permission analysis, API usage patterns, certificate validation, code obfuscation detection
-2. **Dynamic Analysis** - Sandbox execution with network traffic monitoring, behavioral anomaly detection, and runtime API hooking
-3. **LLM Analysis** - Gemini 2.0 Flash-powered contextual threat assessment with India-specific banking trojan detection
-4. **Risk Scoring** - XGBoost-based ML classifier with SHAP explainability and multi-dimensional risk aggregation
-5. **Report Generation** - Actionable intelligence reports with forensic indicators and executive summaries
+2. **YARA Signature Scanning** - Multi-rule malware family detection with severity-based scoring
+3. **MITRE ATT&CK Mapping** - Permission and API call mapping to mobile attack techniques
+4. **Malware Family Classification** - Rule-based family detection (BankBot, Spyware, RAT, Ransomware)
+5. **Dynamic Analysis** - Sandbox execution with runtime event collection, behavioral anomaly detection, and ADB-based monitoring
+6. **LLM Analysis** - Resilient multi-tier LLM routing (Gemini 2.5 Flash → GPT-4o) with smart truncation
+7. **Risk Scoring** - XGBoost-based ML classifier with SHAP explainability and context-aware boost rules
 
 **Key Differentiators:**
 - **Explainable AI** - SHAP values show which features drove the risk score
 - **Regional Threat Intelligence** - India-specific banking malware patterns (UPI, OTP interception)
 - **Real-time Streaming** - Server-sent events provide live analysis progress
-- **Multi-modal Analysis** - Combines rule-based, ML, and LLM approaches
+- **Multi-modal Analysis** - Combines YARA signatures, MITRE mapping, ML, and LLM approaches
+- **Resilient LLM Infrastructure** - Automatic failover between Gemini and OpenAI with context window management
+- **Production-Ready Sandbox** - Full ADB + Frida integration with runtime event collection
+- **VirusTotal Integration** - Hash-based reputation checking
 - **Audit Trail** - JSONL-based audit logging with SQLite feature caching
 
 ---
@@ -61,55 +66,249 @@ MobileGuard AI is an enterprise-grade Android malware detection system designed 
 ## ✨ Features
 
 ### 🔬 **Static Analysis Engine**
-- **APK Parsing** - Androguard-based decompilation with manifest extraction
-- **Permission Profiling** - 22+ dangerous permission detection with combo risk scoring
-- **API Fingerprinting** - Call graph analysis with 14+ suspicious API pattern matching
-- **Obfuscation Detection** - Shannon entropy analysis on strings, base64 pattern matching
-- **Certificate Validation** - Self-signed cert detection, validity period analysis, issuer verification
-- **Native Code Inspection** - `.so` library enumeration with known malware signature matching
+- **APK Parsing** - Androguard-based decompilation with manifest extraction and DEX analysis
+- **Permission Profiling** - 22+ dangerous permission detection with combo risk scoring (READ_SMS + INTERNET = +10 points)
+- **API Fingerprinting** - Call graph analysis with 14+ suspicious API pattern matching (sendTextMessage, Runtime.exec, DexClassLoader)
+- **Obfuscation Detection** - Shannon entropy analysis on strings (>4.5 threshold), base64 pattern matching
+- **Certificate Validation** - Self-signed cert detection, validity period analysis, issuer verification, debug cert flagging
+- **Native Code Inspection** - `.so` library enumeration with known malware signature matching (libfrida-gadget.so, libinject.so)
 - **Call Graph Construction** - NetworkX-based control flow analysis with graph density metrics
+- **VirusTotal Integration** - SHA256 hash reputation checking with malicious/suspicious count extraction
+- **C2 Domain Detection** - URL extraction with threat intelligence feed matching
 
 ### 🏗️ **Dynamic Analysis Sandbox**
-- **Execution Modes** - Live sandbox (ADB + Frida + mitmproxy) or emulated mode
-- **Behavioral Monitoring** - SMS send attempts, accessibility service abuse, silent install detection
-- **Network Traffic Analysis** - Domain extraction, C2 server detection, data exfiltration measurement
-- **Runtime API Hooking** - Frida-based instrumentation for camera/microphone/location access
-- **Device Admin Detection** - Privilege escalation attempt monitoring
-- **Malware Family Matching** - Similarity scoring against known banking trojans
+- **Execution Modes** - Live sandbox (ADB + Frida + logcat) with automatic device detection and fallback to emulated mode
+- **Behavioral Monitoring** - SMS send attempts, accessibility service abuse, silent install detection, overlay detection
+- **Runtime Event Collection** - CollectorOrchestrator with multiple specialized collectors (Frida hooks, dumpsys, logcat parsing)
+- **Network Traffic Analysis** - Domain extraction from logcat, C2 server detection with threat intel matching
+- **System State Analysis** - dumpsys inspection for accessibility services, device admin, foreground services, overlay windows
+- **Device Admin Detection** - Privilege escalation attempt monitoring via device_policy dumpsys
+- **Behavioral Scoring** - Evidence-based anomaly score (0-100) calculated from observed runtime events
+- **Safe Failure Handling** - Graceful degradation to emulated mode when ADB unavailable or device unreachable
+- **Malware Family Matching** - Behavioral pattern correlation against known family signatures
 
 ### 🤖 **LLM-Powered Intelligence**
-- **Model** - Google Gemini 2.0 Flash with custom security analyst system prompt
-- **Contextual Analysis** - Decompiled code interpretation with malicious behavior extraction
-- **Evidence-Based Reasoning** - Cites specific class names, methods, and API calls
-- **Zero-Day Hypothesis Generation** - Novel threat detection for unknown malware families
-- **India-Specific Risk Assessment** - UPI, BHIM, PhonePe, Paytm targeting detection
-- **Structured JSON Output** - Confidence scores, verdict classification, executive summaries
+- **Resilient Multi-Tier Routing** - Primary: Gemini 2.5 Flash → Fallback: GPT-4o with automatic failover
+- **Smart Truncation** - Center-out code truncation (top 40% + bottom 40%) for context window management
+- **Native JSON Output** - Structured response format with strict schema validation and markdown stripping
+- **Contextual Analysis** - Decompiled code interpretation with malicious behavior extraction and evidence citations
+- **Evidence-Based Reasoning** - Cites specific class names, methods, API calls, and permissions in findings
+- **Zero-Day Hypothesis Generation** - Novel threat detection for unknown malware families (triggered when severity > 0.6 AND family_similarity < 0.4)
+- **India-Specific Risk Assessment** - UPI, BHIM, PhonePe, Paytm targeting detection with regional threat patterns
+- **Structured JSON Output** - Confidence scores, verdict classification (APPROVE/MONITOR/ESCALATE/BLOCK), executive summaries
+- **Security Analyst Persona** - 15+ years malware analysis experience, national SOC-level assessment standards
+- **Automatic Retry Logic** - 2-attempt system with progressive truncation on context window errors
 
 ### 📊 **Machine Learning & Explainability**
-- **XGBoost Classifier** - 300 tree ensemble with early stopping and class imbalance handling
-- **37 Engineered Features** - Permission risk, obfuscation metrics, graph topology, certificate trust
-- **SHAP Explainability** - TreeExplainer integration with top-5 feature attribution
-- **Synthetic Training Data** - Drebin/CIC-AndMal-compatible feature distributions
-- **Multi-Dimensional Scoring** - 6 weighted risk dimensions (permissions, obfuscation, behavior, ML, trust, LLM)
-- **Boost Rules** - Context-aware risk amplification (SMS + C2 + Accessibility)
+- **XGBoost Classifier** - 300 tree ensemble with early stopping, class imbalance handling, and CPU-optimized hist tree method
+- **Dataset Feature Extraction** - 37 engineered features from Drebin/CIC-AndMal2017 compatible format
+- **SHAP Explainability** - TreeExplainer integration with top-5 feature attribution and waterfall visualization
+- **Synthetic Training Data** - Statistical distribution matching for benign (n=800) and malicious (n=800) samples
+- **Multi-Dimensional Scoring** - 6 weighted risk dimensions:
+  - Permission Abuse (10%)
+  - Obfuscation (10%)
+  - Behavioral Anomaly (15%)
+  - ML Malware (45%)
+  - Developer Trust (10%)
+  - LLM Severity (10%)
+- **Context-Aware Boost Rules** - Dynamic score amplification:
+  - SMS send attempts (+15)
+  - C2 domains contacted (+20)
+  - Accessibility abuse (+12)
+  - Static C2 IPs (+10)
+  - LLM verdict BLOCK (+10)
+  - Silent install attempt (+15)
+  - Root activity detected (+15)
+  - Shell execution (+10)
+  - Dynamic code loading (+10)
+  - VirusTotal malicious ≥5 (+25)
+  - YARA signature matches (+3 to +25)
 
 ### 📝 **Reporting & Compliance**
-- **Threat Reports** - Structured JSON with verdict, forensic indicators, recommended actions
-- **Audit Logging** - ISO 8601 timestamped JSONL logs with dimension scores and SHAP values
-- **Feature Store** - SQLite-based result caching for duplicate APK detection
+- **Threat Reports** - Structured JSON with verdict, forensic indicators, recommended actions, MITRE techniques
+- **Audit Logging** - ISO 8601 timestamped JSONL logs with dimension scores, SHAP values, and YARA matches
+- **Feature Store** - SQLite-based result caching with model version tracking for duplicate APK detection
 - **CERT-In Compliance** - Reporting format aligned with Indian cybersecurity standards
+- **YARA Match Reporting** - Matched rule names, families, severity levels, and specific string matches
+- **MITRE ATT&CK Coverage** - Tactic-grouped technique IDs with evidence traceability
+- **Family Attribution** - Confidence-scored malware family classification with matched behavioral signals
 
 ### 🎨 **Modern React Frontend**
-- **Real-time Updates** - Server-sent events with live progress tracking
-- **Interactive Visualizations** - Recharts-based risk gauge, dimension radar charts, SHAP waterfall plots
-- **Framer Motion Animations** - Smooth page transitions and component mounting
-- **Tailwind CSS Design System** - Dark mode with glassmorphism effects
-- **Responsive Layout** - Mobile-first design with 12-column grid
-- **Lucide Icons** - Shield, Activity, AlertTriangle, and 50+ security icons
+- **Real-time Updates** - Server-sent events with live progress tracking across 7 pipeline stages
+- **Interactive Visualizations** - Recharts-based risk gauge, 6-axis dimension radar charts, SHAP waterfall plots
+- **Framer Motion Animations** - Smooth page transitions and component mounting with spring physics
+- **Tailwind CSS Design System** - Dark mode with glassmorphism effects and responsive 12-column grid
+- **Responsive Layout** - Mobile-first design with adaptive breakpoints
+- **Lucide Icons** - Shield, Activity, AlertTriangle, FileSearch, Brain, BarChart, and 50+ security icons
+- **Component Library** - 8 specialized components:
+  - UploadZone (drag-and-drop with 150MB client-side validation)
+  - ProgressTracker (5-stage pipeline visualization)
+  - RiskGauge (circular gauge with dynamic gradient coloring)
+  - DimensionChart (6-axis radar with tooltips)
+  - ShapExplainer (top-5 feature attribution bars)
+  - ThreatReport (collapsible sections with copy-to-clipboard)
+  - ActionBanner (verdict display with color-coded badges)
+  - AuditLog (paginated table with filters)
 
 ---
 
 ## 🏛️ Architecture
+
+### **High-Level System Architecture**
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        UI[React Frontend<br/>Vite + Tailwind CSS]
+        Browser[Web Browser<br/>Chrome/Firefox/Safari]
+    end
+    
+    subgraph "API Gateway"
+        API[FastAPI Server<br/>Uvicorn ASGI]
+        CORS[CORS Middleware]
+        SSE[Server-Sent Events<br/>Streaming]
+    end
+    
+    subgraph "Core Pipeline"
+        Orch[Pipeline Orchestrator<br/>Event Coordinator]
+        Cache{Cache Check<br/>SHA256 + Version}
+    end
+    
+    subgraph "Analysis Engines"
+        Static[Static Analyzer<br/>Androguard + NetworkX]
+        YARA[YARA Engine<br/>Signature Scanner]
+        MITRE[MITRE Mapper<br/>ATT&CK Techniques]
+        Family[Family Classifier<br/>Rule-Based Detection]
+        Dynamic[Dynamic Analyzer<br/>ADB + Frida + Logcat]
+        LLM[LLM Analyzer<br/>Resilient Router]
+        Scorer[Risk Scorer<br/>XGBoost + SHAP]
+        Report[Report Generator<br/>Intelligence Synthesis]
+    end
+    
+    subgraph "External Services"
+        Gemini[Google Gemini 2.5 Flash<br/>Primary LLM]
+        GPT[OpenAI GPT-4o<br/>Fallback LLM]
+        VT[VirusTotal API<br/>Hash Reputation]
+        ADB[Android Device<br/>Live Sandbox]
+    end
+    
+    subgraph "Data Layer"
+        FS[(SQLite<br/>Feature Store)]
+        Audit[(JSONL<br/>Audit Logs)]
+        Model[(XGBoost Model<br/>SHAP Explainer)]
+        Rules[(YARA Rules<br/>.yar Files)]
+        Intel[(Threat Intel<br/>C2 Blocklists)]
+    end
+    
+    Browser -->|Upload APK| UI
+    UI <-->|REST API<br/>SSE Stream| API
+    API --> CORS
+    CORS --> Orch
+    
+    Orch --> Cache
+    Cache -->|Hit| UI
+    Cache -->|Miss| Static
+    
+    Static --> YARA
+    Static -->|Hash Check| VT
+    YARA --> MITRE
+    MITRE --> Family
+    Family --> Dynamic
+    
+    Dynamic -->|If Available| ADB
+    Dynamic --> LLM
+    
+    LLM -->|Primary| Gemini
+    LLM -->|Fallback| GPT
+    
+    LLM --> Scorer
+    Scorer --> Report
+    
+    Static -.->|Load| Model
+    Scorer -.->|Load| Model
+    YARA -.->|Load| Rules
+    Static -.->|Query| Intel
+    Dynamic -.->|Query| Intel
+    
+    Report -->|Cache| FS
+    Report -->|Log| Audit
+    Cache -.->|Query| FS
+    
+    Report -->|Final Result| SSE
+    SSE --> UI
+    
+    style UI fill:#3B82F6,stroke:#1E40AF,color:#fff
+    style API fill:#10B981,stroke:#047857,color:#fff
+    style Orch fill:#F59E0B,stroke:#D97706,color:#fff
+    style Gemini fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style GPT fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    style FS fill:#EF4444,stroke:#B91C1C,color:#fff
+    style Model fill:#EF4444,stroke:#B91C1C,color:#fff
+```
+
+### **Data Flow Diagram**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API
+    participant Orchestrator
+    participant Analyzers
+    participant LLM
+    participant Database
+    
+    User->>Frontend: Upload APK File (150MB max)
+    Frontend->>API: POST /analyze (multipart/form-data)
+    API->>Orchestrator: Initialize Pipeline
+    
+    Orchestrator->>Database: Check Cache (SHA256)
+    alt Cache Hit
+        Database-->>Orchestrator: Return Cached Result
+        Orchestrator-->>Frontend: SSE: cache_hit (100%)
+    else Cache Miss
+        Orchestrator-->>Frontend: SSE: static_analysis (10%)
+        Orchestrator->>Analyzers: Static Analysis
+        Analyzers-->>Orchestrator: Static Features
+        
+        Orchestrator-->>Frontend: SSE: yara_scan (25%)
+        Orchestrator->>Analyzers: YARA + MITRE + Family
+        Analyzers-->>Orchestrator: Signatures + Techniques
+        
+        Orchestrator-->>Frontend: SSE: dynamic_analysis (40%)
+        Orchestrator->>Analyzers: Dynamic Analysis
+        Analyzers-->>Orchestrator: Runtime Events
+        
+        alt Composite Score > 40
+            Orchestrator-->>Frontend: SSE: llm_analysis (80%)
+            Orchestrator->>LLM: Analyze Code
+            LLM->>LLM: Try Gemini 2.5 Flash
+            alt Gemini Success
+                LLM-->>Orchestrator: Analysis Result
+            else Gemini Fail
+                LLM->>LLM: Fallback to GPT-4o
+                LLM-->>Orchestrator: Analysis Result
+            end
+        else Score ≤ 40
+            Orchestrator-->>Frontend: SSE: llm_skipped (80%)
+        end
+        
+        Orchestrator-->>Frontend: SSE: risk_scoring (90%)
+        Orchestrator->>Analyzers: ML Score + SHAP
+        Analyzers-->>Orchestrator: Risk Score + Attribution
+        
+        Orchestrator->>Database: Cache Result
+        Orchestrator->>Database: Log Audit Entry
+        
+        Orchestrator-->>Frontend: SSE: complete (100%)
+    end
+    
+    Frontend->>User: Display Risk Gauge + Report
+```
+
+### **Component Interaction Flow**
+
+---
 
 ```mermaid
 graph TD
@@ -124,20 +323,36 @@ graph TD
     D2 --> D3[API Call Graph]
     D3 --> D4[Certificate Validation]
     D4 --> D5[Obfuscation Detection]
+    D5 --> D6[VirusTotal Hash Check]
+    
+    C --> Y[YARA Engine]
+    Y -->|Scan DEX/Manifest/.so| Y1[Signature Matching]
+    Y1 --> Y2[Severity Scoring]
+    
+    C --> M[MITRE Mapper]
+    M --> M1[Permission → Technique]
+    M1 --> M2[API → Technique]
+    
+    C --> FC[Family Classifier]
+    FC --> FC1[BankBot/Spyware/RAT Rules]
     
     C --> E[Dynamic Analyzer]
     E -->|ADB + Frida| E1[Sandbox Execution]
-    E1 --> E2[Behavioral Monitoring]
-    E2 --> E3[Network Analysis]
+    E1 --> E2[Runtime Collectors]
+    E2 --> E3[Behavioral Scoring]
+    E3 --> E4[Event Mapping]
     
     C --> F[LLM Analyzer]
-    F -->|Gemini 2.0 Flash| F1[Contextual Analysis]
-    F1 --> F2[Zero-Day Hypotheses]
+    F -->|Resilient Router| F1[Gemini 2.5 Flash]
+    F1 -->|Fallback| F2[GPT-4o]
+    F2 --> F3[Smart Truncation]
+    F3 --> F4[JSON Validation]
     
     C --> G[Risk Scorer]
-    G -->|XGBoost| G1[ML Prediction]
+    G -->|Dataset Features| G1[XGBoost Model]
     G1 -->|SHAP| G2[Feature Attribution]
-    G2 --> G3[Dimension Aggregation]
+    G2 --> G3[6 Dimension Scores]
+    G3 --> G4[Boost Rules]
     
     C --> H[Report Generator]
     H --> I[Threat Report]
@@ -146,7 +361,8 @@ graph TD
     J -->|SQLite| K[(Cache DB)]
     
     H --> L[Audit Logger]
-    L -->|JSONL| M[(Audit Logs)]
+    L -->|JSONL| N[(Audit Logs)]
+
 ```
 
 ### **Data Flow**
@@ -175,11 +391,12 @@ graph TD
 | **APK Analysis** | Androguard | 3.3.5 | DEX decompilation, manifest parsing |
 | **ML Framework** | XGBoost | 2.0.3 | Gradient boosting classifier |
 | **Explainability** | SHAP | 0.45.1 | TreeExplainer for feature attribution |
-| **LLM API** | Google Gemini | 2.0 Flash | Contextual code analysis |
+| **LLM API** | Google Gemini + OpenAI | 2.5 Flash / GPT-4o | Resilient multi-tier routing |
 | **Graph Analysis** | NetworkX | 3.3 | Call graph construction |
 | **Data Processing** | Pandas + NumPy | 2.2.2 + 1.26.4 | Feature engineering |
 | **Database** | SQLAlchemy | 2.0.30 | ORM for SQLite feature store |
 | **File Type Detection** | python-magic | 0.4.27 | APK validation |
+| **YARA Scanner** | yara-python | 4.5.1 | Signature-based detection |
 | **Testing** | pytest + httpx | 8.2.2 + 0.27.0 | Unit/integration tests |
 
 ### **Frontend**
@@ -286,6 +503,7 @@ npm run preview  # Preview production build
 ```bash
 # Required
 GEMINI_API_KEY="your-gemini-api-key-here"
+OPENAI_API_KEY="your-openai-api-key-here"    # For LLM fallback tier
 
 # Optional
 VIRUSTOTAL_API_KEY="your-vt-api-key"          # For threat intelligence enrichment
@@ -351,11 +569,17 @@ curl -X POST "http://localhost:8000/analyze" \
 ```
 data: {"stage":"static_analysis","status":"running","progress":10}
 
+data: {"stage":"yara_scan","status":"running","progress":25}
+
+data: {"stage":"cache_hit","status":"done","progress":20}  # If APK previously analyzed
+
 data: {"stage":"dynamic_analysis","status":"running","progress":40}
 
-data: {"stage":"llm_analysis","status":"running","progress":60}
+data: {"stage":"llm_skipped","status":"done","progress":80}  # If composite_score ≤ 40
 
-data: {"stage":"risk_scoring","status":"running","progress":80}
+data: {"stage":"llm_analysis","status":"running","progress":80}  # If composite_score > 40
+
+data: {"stage":"risk_scoring","status":"running","progress":60}
 
 data: {"stage":"report_generation","status":"running","progress":90}
 
@@ -373,6 +597,7 @@ curl http://localhost:8000/health
   "status": "ok",
   "version": "1.0.0",
   "model_loaded": true,
+  "llm_available": true,
   "sandbox_available": false
 }
 ```
@@ -462,7 +687,209 @@ Remove cached analysis result.
 
 ## 🔬 Pipeline Components
 
+### **Pipeline Orchestrator**
+
+**File:** `backend/pipeline/orchestrator.py`
+
+The orchestrator coordinates all 7 analysis stages with intelligent caching and conditional LLM invocation:
+
+1. **Cache Check** - Query feature store by SHA256 hash + model version
+2. **Static Analysis** - APK decompilation and feature extraction
+3. **YARA Scanning** - Signature-based malware family detection
+4. **MITRE Mapping** - Permission/API → ATT&CK technique mapping
+5. **Family Classification** - Rule-based family detection
+6. **Dynamic Analysis** - Runtime behavior monitoring (if sandbox available)
+7. **Conditional LLM Analysis** - Only invoked if `composite_score > 40` (cost optimization)
+8. **Risk Scoring** - ML prediction + SHAP + boost rules
+9. **Report Generation** - Threat report with actionable intelligence
+
+**Key Optimizations:**
+- **Smart LLM Gating** - Skip expensive LLM calls for low-risk apps (saves 70% of API costs)
+- **Hash-Based Caching** - Instant results for previously analyzed APKs
+- **Model Version Tracking** - Cache invalidation when model updates
+- **SSE Streaming** - Real-time progress updates to frontend
+
+---
+
 ### **1. Static Analyzer**
+
+**Implementation:** `backend/pipeline/static_analyzer.py`
+
+Extracts 27+ static features using Androguard with VirusTotal enrichment.
+
+**Core Capabilities:**
+- APK decompilation and manifest parsing
+- Permission risk scoring with combo detection
+- Call graph construction using NetworkX
+- Certificate chain validation
+- Obfuscation detection via Shannon entropy
+- Native library inspection
+- C2 domain/IP extraction
+- VirusTotal hash reputation check
+
+---
+
+### **2. YARA Signature Engine**
+
+**Implementation:** `backend/detection/yara_engine.py`
+
+Production-grade signature scanning with metadata-aware severity scoring.
+
+**Architecture:**
+- Independent rule compilation (one broken rule doesn't disable engine)
+- Unpacked content scanning (DEX, AndroidManifest.xml, .so files)
+- Cross-component deduplication
+- Severity-based score weighting (CRITICAL: 100, HIGH: 70, MEDIUM: 40, LOW: 15)
+- Action prioritization (BLOCK > ESCALATE > MONITOR > APPROVE)
+- Safe failure handling with scan error reporting
+
+**Score Contribution:**
+- `severity_score` - Highest single rule weight (0-100)
+- `score_boost` - Additive boost for risk composite (capped at 40)
+
+---
+
+### **3. MITRE ATT&CK Mapper**
+
+**Implementation:** `backend/intel/mitre_mapper.py`
+
+Maps permissions and APIs to MITRE Mobile ATT&CK techniques.
+
+**Coverage:**
+- 20+ permission mappings (SMS → T1636.004, Accessibility → T1417)
+- 10+ API mappings (DexClassLoader → T1407, Runtime.exec → T1406)
+- Tactic-grouped findings (Collection, Persistence, Defense Evasion, etc.)
+- Evidence traceability (each technique links to triggering signal)
+
+---
+
+### **4. Family Classifier**
+
+**Implementation:** `backend/intel/family_classifier.py`
+
+Rule-based classification with confidence scoring.
+
+**Supported Families:**
+- **BankBot-like** - SMS + Accessibility overlay (confidence: 0.75+)
+- **Spyware-like** - Contacts + Location exfiltration (confidence: 0.75+)
+- **RAT-like** - Dynamic code loading + shell execution (confidence: 0.70+)
+- **Ransomware-like** - Storage encryption + device locking (confidence: 0.70+)
+
+**Algorithm:**
+- Required signals (all must match)
+- Trigger signals (any N must match)
+- Bonus signals (each adds +0.05 confidence)
+- Threshold filtering (default: 0.8)
+
+---
+
+### **5. Dynamic Analyzer**
+
+**Implementation:** `backend/pipeline/dynamic_analyzer.py`
+
+Full ADB + Frida + logcat integration with automatic fallback.
+
+**Live Sandbox Mode:**
+- APK installation via ADB
+- Logcat capture with signal extraction
+- UI interaction via `adb shell monkey`
+- dumpsys inspection (accessibility, device_policy, window, activity services)
+- Runtime event collection (Frida hooks, system state)
+- Behavioral anomaly scoring (0-100)
+
+**Emulated Mode:**
+- Graceful degradation when no device available
+- Returns neutral values instead of blocking analysis
+- Allows ML/LLM tiers to carry the decision weight
+
+---
+
+### **6. LLM Analyzer**
+
+**Implementation:** `backend/pipeline/llm_analyzer.py` + `backend/pipeline/resilient_router.py`
+
+Multi-tier routing with smart truncation and strict JSON validation.
+
+**Routing Strategy:**
+1. **Primary Tier** - Gemini 2.5 Flash with native JSON output
+2. **Fallback Tier** - GPT-4o with structured response format
+3. **Retry Logic** - 2 attempts with progressive truncation on context errors
+
+**Smart Truncation:**
+- Center-out strategy (top 40% + bottom 40%)
+- Preserves class headers/imports and execution tails
+- Triggered automatically on context window errors
+
+**Security Analyst Persona:**
+- 15+ years malware analysis experience
+- Evidence-based reasoning (no speculation)
+- Distinguishes capability from intent
+- Maps to MITRE ATT&CK Mobile
+- India-specific threat assessment
+
+---
+
+### **7. Risk Scorer**
+
+**Implementation:** `backend/pipeline/risk_scorer.py`
+
+XGBoost classifier with SHAP explainability and context-aware boost rules.
+
+**Multi-Dimensional Scoring:**
+```python
+dimension_scores = {
+    "permission_abuse": 10% weight,      # Dangerous permissions
+    "obfuscation": 10% weight,           # Code obfuscation
+    "behavioral_anomaly": 15% weight,    # Runtime behavior
+    "ml_malware": 45% weight,            # XGBoost prediction
+    "developer_trust": 10% weight,       # Certificate validation
+    "llm_severity": 10% weight,          # LLM assessment
+}
+
+composite_score = Σ(dimension_score × weight)
+```
+
+**Boost Rules (Context-Aware Amplification):**
+- SMS send attempts → +15 points
+- C2 domains contacted → +20 points
+- Accessibility service abuse → +12 points
+- Static C2 IPs found → +10 points
+- LLM verdict BLOCK → +10 points
+- Silent install attempt → +15 points
+- Root activity detected → +15 points
+- Shell execution → +10 points
+- Dynamic code loading → +10 points
+- VirusTotal malicious ≥5 → +25 points
+- YARA matches → +3 to +25 points (capped at +40)
+
+**Action Thresholds:**
+```python
+RISK_THRESHOLDS = {
+    "LOW":    0-25  → APPROVE,
+    "MEDIUM": 26-50 → MONITOR,
+    "HIGH":   51-75 → ESCALATE,
+    "CRITICAL": 76-100 → BLOCK
+}
+```
+
+**SHAP Explainability:**
+```python
+explainer = shap.TreeExplainer(xgb_model)
+shap_values = explainer.shap_values(feature_vector)
+
+# Extract top 5 contributors
+top_features = [
+    ("permission_danger", +18.5),
+    ("obfuscation_score", +12.3),
+    ("c2_hit_count", +9.7),
+    ("has_native_code", +5.2),
+    ("graph_density", -3.1)
+]
+```
+
+---
+
+### **8. Report Generator**
 
 **File:** `backend/pipeline/static_analyzer.py`
 
@@ -999,19 +1426,33 @@ mobileguard-ai/
 │   ├── config.py                     # Environment config & constants
 │   ├── main.py                       # FastAPI app & endpoints
 │   ├── requirements.txt              # Python dependencies
+│   ├── dataset_feature_extractor.py  # 37-feature extraction for ML model
 │   │
 │   ├── pipeline/                     # Analysis pipeline modules
-│   │   ├── orchestrator.py          # Pipeline coordinator
+│   │   ├── orchestrator.py          # Pipeline coordinator with SSE streaming
 │   │   ├── static_analyzer.py       # Androguard-based APK analysis
-│   │   ├── dynamic_analyzer.py      # Sandbox execution (ADB + Frida)
-│   │   ├── llm_analyzer.py          # Gemini API integration
+│   │   ├── dynamic_analyzer.py      # ADB + Frida sandbox execution
+│   │   ├── llm_analyzer.py          # LLM analysis with structured output
+│   │   ├── resilient_router.py      # Multi-tier LLM routing (Gemini → GPT-4o)
 │   │   ├── risk_scorer.py           # XGBoost + SHAP scoring
-│   │   └── report_generator.py      # Threat report generation
+│   │   ├── report_generator.py      # Threat report generation
+│   │   ├── behavior_scorer.py       # Runtime behavior anomaly scoring
+│   │   ├── runtime_collectors.py    # Frida hooks + dumpsys collectors
+│   │   ├── runtime_events.py        # Event data structures
+│   │   └── event_mapper.py          # Event → feature mapping
+│   │
+│   ├── detection/                    # Signature-based detection
+│   │   ├── yara_engine.py           # YARA scanner with metadata scoring
+│   │   └── yara_rules/              # .yar signature files
+│   │
+│   ├── intel/                        # Threat intelligence
+│   │   ├── mitre_mapper.py          # ATT&CK technique mapping
+│   │   └── family_classifier.py     # Malware family classification
 │   │
 │   ├── data/                         # Data management
 │   │   ├── feature_store.py         # SQLite caching layer
 │   │   ├── audit_logger.py          # JSONL audit logging
-│   │   └── threat_intel.py          # C2 blocklist integration
+│   │   └── threat_intel.py          # C2 blocklist + VirusTotal integration
 │   │
 │   ├── training/                     # ML model training
 │   │   ├── train_xgboost.py         # Model training script
