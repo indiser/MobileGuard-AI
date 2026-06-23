@@ -19,6 +19,7 @@ try:
     from backend.intel.family_classifier import FamilyClassifier
     from backend.pipeline.evidence_engine import EvidenceEngine
     from backend.pipeline.confidence_engine import ConfidenceEngine
+    from backend.plugins.plugin_manager import PluginManager
 except ImportError:
     pass
 
@@ -72,6 +73,7 @@ class PipelineOrchestrator:
         self.family_classifier = FamilyClassifier()
         self.evidence_engine = EvidenceEngine()
         self.confidence_engine = ConfidenceEngine()
+        self.plugin_manager = PluginManager()
         
     def save_to_temp(self, apk_bytes: bytes, filename: str) -> str:
         temp_dir = "temp_apks"
@@ -157,6 +159,17 @@ class PipelineOrchestrator:
 
             yield PipelineEvent(stage="dynamic_analysis", status="running", progress=40)
             dynamic = self.dynamic_analyzer.analyze(apk_path, static.package_name)
+
+            yield PipelineEvent(stage="plugin_execution", status="running", progress=55)
+            
+            # Run all custom plugins in parallel threads
+            plugin_findings = self.plugin_manager.run_plugins(
+                static_features=static, 
+                dynamic_features=dynamic
+            )
+            
+            # Seamlessly merge plugin intelligence into the main evidence stream
+            evidence_findings.extend(plugin_findings)
 
             yield PipelineEvent(stage="risk_scoring", status="running", progress=60)
 
