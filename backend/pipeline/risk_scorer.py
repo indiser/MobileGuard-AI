@@ -25,6 +25,7 @@ class RiskScore:
     shap_top_features: List[Tuple[str, float]]
     shap_explanation: str
     boost_rules_applied: List[str]
+    xgb_probability: float
 
 class RiskScorer:
     def __init__(self, model_path: str = config.MODEL_PATH):
@@ -90,6 +91,10 @@ class RiskScorer:
                 probs = self.xgb_model.predict_proba(feature_vector)
                 print("XGBOOST PROB:", probs)
                 ml_score = float(probs[0][1] * 100.0)
+
+                xgb_probability = float(
+                    probs[0][1]
+                )
                 
                 shap_values = self.explainer.shap_values(feature_vector)
                 print("XGBOOST MODEL LOADED")
@@ -143,9 +148,12 @@ class RiskScorer:
                     ("api_suspicion", static.api_suspicion_score)
                 ]
                 shap_explanation = "Heuristic scoring applied (ML model execution failed)."
+                xgb_probability = ml_score / 100.0
         else:
             ml_score = static.permission_danger_score * 0.7 + static.api_suspicion_score * 0.3
             shap_top_features = [("permission_danger", static.permission_danger_score), ("api_suspicion", static.api_suspicion_score)]
+            xgb_probability = ml_score / 100.0
+            
             
         dimension_scores = {
             "permission_abuse": static.permission_danger_score,
@@ -247,5 +255,6 @@ class RiskScorer:
             ml_score=ml_score,
             shap_top_features=shap_top_features,
             shap_explanation=shap_explanation,
-            boost_rules_applied=boost_rules_applied
+            boost_rules_applied=boost_rules_applied,
+            xgb_probability=xgb_probability
         )

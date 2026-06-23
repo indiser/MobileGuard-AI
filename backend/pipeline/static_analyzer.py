@@ -46,6 +46,7 @@ class StaticFeatures:
     analysis_duration_ms: int
     vt_malicious_count: int
     vt_suspicious_count: int
+    extracted_strings: List[str]
 
 DANGEROUS_PERMISSIONS = {
     'READ_SMS': 5, 'RECEIVE_SMS': 5, 'SEND_SMS': 5,
@@ -430,7 +431,8 @@ class StaticAnalyzer:
             target_sdk=target_sdk,
             analysis_duration_ms=analysis_duration_ms,
             vt_malicious_count=vt_malicious_count,
-            vt_suspicious_count=vt_suspicious_count
+            vt_suspicious_count=vt_suspicious_count,
+            extracted_strings=strings[:5000]
         )
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const STAGES = [
   { id: 'static_analysis', label: 'Static Analysis', desc: 'Decompiling and extracting manifest' },
+  { id: 'yara_scan', label: 'YARA Scanning', desc: 'Hunting known malware signatures' }, // Added YARA
   { id: 'dynamic_analysis', label: 'Sandbox Execution', desc: 'Running in secure environment' },
-  { id: 'llm_analysis', label: 'AI Threat Assessment', desc: 'Evaluating behaviors via LLM' },
+  { id: 'llm_analysis', altId: 'llm_skipped', label: 'AI Threat Assessment', desc: 'Evaluating behaviors via LLM' }, // Added altId for skip state
   { id: 'risk_scoring', label: 'Risk Scoring', desc: 'Computing threat severity' },
   { id: 'report_generation', label: 'Report Generation', desc: 'Compiling final intelligence' }
 ];
@@ -33,12 +34,13 @@ export default function ProgressTracker({ events, error, isUploading }) {
         <div className="absolute left-[19px] top-6 bottom-10 w-px bg-white/10" />
 
         {STAGES.map((stage, idx) => {
-          const eventIndex = events.findIndex(e => e.stage === stage.id);
+          const eventIndex = events.findIndex(e => e.stage === stage.id || e.stage === stage.altId);
           const hasPassed = eventIndex !== -1;
           const event = events[eventIndex];
           
           const isComplete = events.some(e => e.stage === 'complete') || 
-                             (eventIndex !== -1 && eventIndex < events.length - 1);
+                             (eventIndex !== -1 && eventIndex < events.length - 1) ||
+                             (event && event.stage === 'llm_skipped'); // Mark as visually complete if skipped
           
           const isRunning = event && event.status === 'running' && !isComplete && !error;
           const isError = error && event && event.status === 'running';

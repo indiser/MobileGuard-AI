@@ -25,7 +25,7 @@ class ThreatReport:
     report_generated_at: str        # ISO 8601 timestamp
 
 class ReportGenerator:
-    def generate(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures', llm: 'LLMFeatures', score: 'RiskScore', yara_result, mitre_findings, family_result) -> ThreatReport:
+    def generate(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures', llm: 'LLMFeatures', score: 'RiskScore', yara_result, mitre_findings, family_result, evidence_findings=None, confidence_score=None) -> ThreatReport:
         
         indicators = []
         if static.c2_hit_count > 0:
@@ -62,6 +62,11 @@ class ReportGenerator:
             f"ML MALWARE PROBABILITY: {score.ml_score:.2f}%"
         )
 
+        if confidence_score is not None:
+            report_lines.append(
+                f"ANALYSIS CONFIDENCE: {confidence_score:.2f}%"
+            )
+
         report_lines.append(
             f"VIRUSTOTAL: "
             f"{static.vt_malicious_count} malicious, "
@@ -79,13 +84,29 @@ class ReportGenerator:
         report_lines.append(
             f"  {family_result.family}"
         )
+        report_lines.append(
+            f"  Confidence: {family_result.confidence:.1f}%"
+        )
 
         report_lines.append("")
         report_lines.append("MITRE ATT&CK MOBILE:")
+
+        if hasattr(mitre_findings, 'confirmed_techniques') and mitre_findings.confirmed_techniques:
+            report_lines.append("  [CONFIRMED ATTACK CHAINS]")
+            for tech in mitre_findings.confirmed_techniques:
+                report_lines.append(f"  - {tech.technique_id} ({tech.tactic}): {tech.name} [Confidence: {tech.confidence}%]")
+                for ev in tech.evidence:
+                    report_lines.append(f"      * {ev}")
+        else:
+            report_lines.append("  [No dynamic attack chains confirmed]")
+
+
+        report_lines.append("\n  [STATIC CAPABILITIES]")
         for t in mitre_findings.techniques:
             report_lines.append(
                 f"  - {t.technique_id}: {t.name}"
             )
+
         
         if dynamic.sandbox_mode == "emulated":
             report_lines.append(
@@ -142,7 +163,22 @@ class ReportGenerator:
                 report_lines.append(
                     f"      MITRE: {event.mitre_technique}"
                 )
+            
+        report_lines.append("")
+        report_lines.append("CORRELATED FINDINGS:")
 
+        for finding in (evidence_findings or []):
+            report_lines.append(
+                f"  - {finding.finding} "
+                f"({finding.confidence}%)"
+            )
+        
+        report_lines.append("")
+        report_lines.append(
+            f"OVERALL CONFIDENCE: "
+            f"{confidence_score:.2f}%"
+        )
+        
         report_lines.append("RECOMMENDED ACTIONS:")
         
         if score.action == "BLOCK":

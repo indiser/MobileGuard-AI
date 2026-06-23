@@ -1,5 +1,68 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from backend.pipeline.runtime_events import BehaviorEvent
+
+@dataclass(frozen=True)
+class MitreTechnique:
+    technique_id: str           
+    name: str                   
+    tactic: str                 
+    parent_id: Optional[str]    
+    source: str     
+
+    def __str__(self) -> str:
+        parent = f" (sub of {self.parent_id})" if self.parent_id else ""
+        return f"[{self.tactic}] {self.technique_id}{parent} – {self.name}  (triggered by: {self.source})"            
+
+@dataclass
+class ConfirmedTechnique:
+    """
+    Matches your requested structure:
+    {"technique": "T1411", "confidence": 92.0, "evidence": ["..."]}
+    """
+    technique_id: str
+    tactic: str
+    name: str
+    confidence: float
+    evidence: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "technique": self.technique_id,
+            "tactic": self.tactic,
+            "name": self.name,
+            "confidence": round(self.confidence, 1),
+            "evidence": self.evidence
+        }
+
+@dataclass
+class MappingResult:
+    techniques: list[MitreTechnique] = field(default_factory=list)
+    confirmed_techniques: list[ConfirmedTechnique] = field(default_factory=list)
+    unmapped_permissions: list[str] = field(default_factory=list)
+    unmapped_apis: list[str] = field(default_factory=list)
+
+    def by_tactic(self) -> dict[str, list[MitreTechnique]]:
+        """Group static techniques by tactic for report-style output."""
+        grouped: dict[str, list[MitreTechnique]] = {}
+        for t in self.techniques:
+            grouped.setdefault(t.tactic, []).append(t)
+        return dict(sorted(grouped.items()))
+
+    def technique_ids(self) -> list[str]:
+        return sorted({t.technique_id for t in self.techniques})
+
+    def summary(self) -> str:
+        lines = ["=== MITRE ATT&CK Mobile Mapping ==="]
+        for tactic, techs in self.by_tactic().items():
+            lines.append(f"\n[{tactic}]")
+            for t in techs:
+                lines.append(f"  {t.technique_id}  {t.name}  ← {t.source}")
+        if self.unmapped_permissions:
+            lines.append(f"\nUnmapped permissions: {', '.join(self.unmapped_permissions)}")
+        if self.unmapped_apis:
+            lines.append(f"Unmapped APIs: {', '.join(self.unmapped_apis)}")
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -184,35 +247,6 @@ _API_MAP: dict[str, dict] = {
 }
 
 
-@dataclass
-class MappingResult:
-    techniques: list[MitreTechnique] = field(default_factory=list)
-    unmapped_permissions: list[str] = field(default_factory=list)
-    unmapped_apis: list[str] = field(default_factory=list)
-
-    def by_tactic(self) -> dict[str, list[MitreTechnique]]:
-        """Group techniques by tactic for report-style output."""
-        grouped: dict[str, list[MitreTechnique]] = {}
-        for t in self.techniques:
-            grouped.setdefault(t.tactic, []).append(t)
-        return dict(sorted(grouped.items()))
-
-    def technique_ids(self) -> list[str]:
-        return sorted({t.technique_id for t in self.techniques})
-
-    def summary(self) -> str:
-        lines = ["=== MITRE ATT&CK Mobile Mapping ==="]
-        for tactic, techs in self.by_tactic().items():
-            lines.append(f"\n[{tactic}]")
-            for t in techs:
-                lines.append(f"  {t.technique_id}  {t.name}  ← {t.source}")
-        if self.unmapped_permissions:
-            lines.append(f"\nUnmapped permissions: {', '.join(self.unmapped_permissions)}")
-        if self.unmapped_apis:
-            lines.append(f"Unmapped APIs: {', '.join(self.unmapped_apis)}")
-        return "\n".join(lines)
-
-
 class MitreMapper:
     """
     Maps Android permissions and suspicious API calls to MITRE ATT&CK for
@@ -227,6 +261,7 @@ class MitreMapper:
         self,
         permissions: list[str],
         suspicious_apis: list[str],
+        dynamic_events: list['BehaviorEvent'] = None, # Added parameter
         deduplicate: bool = True,
     ) -> MappingResult:
         """
@@ -268,9 +303,13 @@ class MitreMapper:
                 continue
             techniques.append(tech)
             seen_ids.add(tech.technique_id)
+        
+        dynamic_events = dynamic_events or []
+        confirmed_chains = self.correlate_attack_chains(permissions, dynamic_events)
 
         return MappingResult(
             techniques=techniques,
+            confirmed_techniques=confirmed_chains,
             unmapped_permissions=unmapped_perms,
             unmapped_apis=unmapped_apis,
         )
@@ -286,3 +325,79 @@ class MitreMapper:
             parent_id=entry.get("parent_id"),
             source=source,
         )
+
+    def correlate_attack_chains(
+        self, 
+        static_permissions: list[str], 
+        dynamic_events: list['BehaviorEvent']
+    ) -> list[ConfirmedTechnique]:
+        """
+        Calculates dynamic confidence for MITRE techniques based on the 
+        convergence of Static Capabilities and Runtime Execution.
+        """
+        confirmed = []
+        
+        # Helper to extract event types from runtime execution
+        runtime_types = {e.event_type.value for e in dynamic_events}
+        
+        # -----------------------------------------------------------------
+        # T1411: Credential/Input Capture (Overlay Attack)
+        # -----------------------------------------------------------------
+        t1411_evidence = []
+        confidence = 0.0
+        
+        if "SYSTEM_ALERT_WINDOW" in static_permissions:
+            t1411_evidence.append("Static: Requested SYSTEM_ALERT_WINDOW")
+            confidence += 20.0
+            
+        if "BIND_ACCESSIBILITY_SERVICE" in static_permissions:
+            t1411_evidence.append("Static: Requested BIND_ACCESSIBILITY_SERVICE")
+            confidence += 20.0
+            
+        if "overlay_window_drawn" in runtime_types:
+            t1411_evidence.append("Runtime: Actively drew an overlay window")
+            confidence += 30.0
+            
+        if "accessibility_service_enabled" in runtime_types or "accessibility_node_read" in runtime_types:
+            t1411_evidence.append("Runtime: Actively abused Accessibility nodes")
+            confidence += 30.0
+
+        # FALSE POSITIVE GATE: 
+        # Only output if we have at least 1 runtime event and 1 static permission
+        if confidence >= 50.0 and any("Runtime:" in e for e in t1411_evidence):
+            confirmed.append(ConfirmedTechnique(
+                technique_id="T1411",
+                tactic="Credential Access",
+                name="Input Capture / Overlay",
+                confidence=confidence, # Can reach up to 100.0
+                evidence=t1411_evidence
+            ))
+
+        # -----------------------------------------------------------------
+        # T1407: Download New Code (Dropper)
+        # -----------------------------------------------------------------
+        t1407_evidence = []
+        confidence_t1407 = 0.0
+        
+        if "REQUEST_INSTALL_PACKAGES" in static_permissions:
+            t1407_evidence.append("Static: Requested REQUEST_INSTALL_PACKAGES")
+            confidence_t1407 += 30.0
+            
+        if "dynamic_code_loaded" in runtime_types:
+            t1407_evidence.append("Runtime: Loaded dynamic Dex/Jar code")
+            confidence_t1407 += 40.0
+            
+        if "package_installed_silently" in runtime_types:
+            t1407_evidence.append("Runtime: Attempted silent APK installation")
+            confidence_t1407 += 30.0
+            
+        if confidence_t1407 >= 70.0 and any("Runtime:" in e for e in t1407_evidence):
+            confirmed.append(ConfirmedTechnique(
+                technique_id="T1407",
+                tactic="Defense Evasion",
+                name="Download New Code",
+                confidence=confidence_t1407,
+                evidence=t1407_evidence
+            ))
+
+        return confirmed

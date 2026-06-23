@@ -17,6 +17,8 @@ try:
     from backend.detection.yara_engine import YaraEngine
     from backend.intel.mitre_mapper import MitreMapper
     from backend.intel.family_classifier import FamilyClassifier
+    from backend.pipeline.evidence_engine import EvidenceEngine
+    from backend.pipeline.confidence_engine import ConfidenceEngine
 except ImportError:
     pass
 
@@ -33,6 +35,8 @@ class AnalysisResult:
     mitre: dict
     family: dict
     yara: dict
+    confidence_score: float
+    evidence_findings: list
     
 @dataclasses.dataclass
 class PipelineEvent:
@@ -66,6 +70,8 @@ class PipelineOrchestrator:
         self.yara_engine = YaraEngine()
         self.mitre_mapper = MitreMapper()
         self.family_classifier = FamilyClassifier()
+        self.evidence_engine = EvidenceEngine()
+        self.confidence_engine = ConfidenceEngine()
         
     def save_to_temp(self, apk_bytes: bytes, filename: str) -> str:
         temp_dir = "temp_apks"
@@ -128,20 +134,6 @@ class PipelineOrchestrator:
                     error=yara_result.scan_error
                 )
 
-            mitre_findings = (
-                self.mitre_mapper.map_findings(
-                    static.permission_list,
-                    static.top_apis
-                )
-            )
-
-            family = (
-                self.family_classifier.classify(
-                    static.permission_list,
-                    static.top_apis
-                )
-            )
-
 
             cached = self.feature_store.get(static.apk_hash, config.MODEL_VERSION)
             if cached:
@@ -167,6 +159,35 @@ class PipelineOrchestrator:
             dynamic = self.dynamic_analyzer.analyze(apk_path, static.package_name)
 
             yield PipelineEvent(stage="risk_scoring", status="running", progress=60)
+
+            family = self.family_classifier.classify(
+                permissions=static.permission_list,
+                suspicious_apis=static.top_apis,
+                strings=static.extracted_strings,
+                runtime_events=dynamic.__dict__
+            )
+
+            mitre_findings = (
+                self.mitre_mapper.map_findings(
+                    permissions=static.permission_list,
+                    suspicious_apis=static.top_apis,
+                    dynamic_events=dynamic.runtime_events  # Now we pass the actual execution data
+                )
+            )
+
+            evidence_findings = (
+                self.evidence_engine.correlate(
+                    static_features=static,
+                    dynamic_events=dynamic,
+                    yara_hits=yara_result,
+                    mitre_hits=mitre_findings,
+                    vt_results={
+                        "malicious": static.vt_malicious_count,
+                        "suspicious": static.vt_suspicious_count
+                    }
+                )
+            )
+
             dataset_features = extract_from_apk(apk_path)
             
             fallback_llm = (
@@ -181,6 +202,16 @@ class PipelineOrchestrator:
                 yara_result
             )
 
+            confidence_score = (
+                self.confidence_engine.calculate(
+                    ml_probability=score.xgb_probability,
+                    family_confidence=family.confidence,
+                    yara_score=yara_result.severity_score,
+                    vt_malicious=static.vt_malicious_count,
+                    evidence_findings=evidence_findings
+                )
+            )
+
             if score.composite_score > 40:
 
                 yield PipelineEvent(
@@ -191,7 +222,10 @@ class PipelineOrchestrator:
 
                 llm = self.llm_analyzer.analyze(
                     static,
-                    dynamic
+                    dynamic,
+                    family=family,
+                    evidence=evidence_findings,
+                    confidence_score=confidence_score
                 )
 
                 score = self.risk_scorer.score(
@@ -200,6 +234,16 @@ class PipelineOrchestrator:
                     llm,
                     dataset_features,
                     yara_result
+                )
+
+                confidence_score = (
+                    self.confidence_engine.calculate(
+                        ml_probability=score.xgb_probability,
+                        family_confidence=family.confidence,
+                        yara_score=yara_result.severity_score,
+                        vt_malicious=static.vt_malicious_count,
+                        evidence_findings=evidence_findings
+                    )
                 )
             else:
 
@@ -213,7 +257,7 @@ class PipelineOrchestrator:
 
 
             yield PipelineEvent(stage="report_generation", status="running", progress=90)
-            report = self.report_generator.generate(static, dynamic, llm, score, yara_result,mitre_findings,family)
+            report = self.report_generator.generate(static, dynamic, llm, score, yara_result,mitre_findings,family,evidence_findings=evidence_findings,confidence_score=confidence_score)
 
             result = AnalysisResult(
                 apk_hash=static.apk_hash,
@@ -226,7 +270,17 @@ class PipelineOrchestrator:
                 total_duration_ms=int((time.time() - t0) * 1000),
                 mitre=dataclasses.asdict(mitre_findings),
                 family=dataclasses.asdict(family),
-                yara=dataclasses.asdict(yara_result)
+                yara=dataclasses.asdict(yara_result),
+                confidence_score=confidence_score,
+                evidence_findings=[
+                    {
+                        "finding": f.finding,
+                        "severity": f.severity,
+                        "confidence": f.confidence,
+                        "evidence": f.evidence
+                    }
+                    for f in evidence_findings
+                ]
             )
 
             # We will wire up FeatureStore and AuditLogger in Module 9

@@ -57,7 +57,7 @@ class LLMAnalyzer:
             self.model = None
         self.router = ResilientLLMRouter()
 
-    def analyze(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures') -> LLMFeatures:
+    def analyze(self, static: 'StaticFeatures', dynamic: 'DynamicFeatures', family=None, evidence=None, confidence_score=None) -> LLMFeatures:
         t0 = time.time()
         
         if self.model is None:
@@ -388,6 +388,30 @@ DECOMPILED SOURCE CODE
 
 {formatted_class_code}
 
+
+MALWARE FAMILY
+
+{family.family if family else "Unknown"}
+
+FAMILY CONFIDENCE
+
+{family.confidence if family else 0}
+
+CORRELATED FINDINGS
+
+{json.dumps([
+    {
+        "finding": f.finding,
+        "confidence": f.confidence,
+        "severity": f.severity
+    }
+    for f in (evidence or [])
+], indent=2)}
+
+ENGINE CONFIDENCE
+
+{confidence_score if confidence_score else 0}
+
 --------------------------------------------------
 ANALYSIS INSTRUCTIONS
 --------------------------------------------------
@@ -575,6 +599,7 @@ The JSON must exactly match this schema:
     "benign_explanations_considered": [
         ""
     ]
+    
 }}
 """
 
@@ -615,11 +640,17 @@ The JSON must exactly match this schema:
                 describe the attack chain, estimate impact on Indian banking users.
                 Return ONLY a JSON array of strings.
                 """
-                hyp_response = self.model.generate_content(hypotheses_prompt)
-                hyp_text = hyp_response.text
-                if "[" in hyp_text and "]" in hyp_text:
-                    hyp_json_str = hyp_text[hyp_text.find("["):hyp_text.rfind("]")+1]
-                    features.zero_day_hypotheses = json.loads(hyp_json_str)
+
+                hyp_data = self.router.analyze_malware(
+                    system_prompt="You are a JSON generator. Return ONLY a JSON array of strings.",
+                    user_prompt_template=hypotheses_prompt,
+                    decompiled_code=""
+                )
+
+                if isinstance(hyp_data, list):
+                    features.zero_day_hypotheses = hyp_data
+                elif isinstance(hyp_data, dict) and "hypotheses" in hyp_data:
+                    features.zero_day_hypotheses = hyp_data["hypotheses"]
 
         except Exception as e:
             print("===== LLM FAILURE =====")
