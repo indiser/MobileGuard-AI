@@ -12,6 +12,10 @@ from fastapi import HTTPException
 import magic
 from androguard.misc import AnalyzeAPK
 from backend.data.threat_intel import ThreatIntel
+from backend.intel.anti_analysis_detector import AntiAnalysisDetector
+from backend.intel.resource_analyzer import ResourceAnalyzer
+from backend.intel.crypto_analyzer import CryptoAnalyzer
+
 # Suppress androguard's "Requested API level X is larger than maximum" warning
 logging.getLogger("androguard.core.apk").setLevel(logging.ERROR)
 logging.getLogger("androguard").setLevel(logging.ERROR)
@@ -47,6 +51,21 @@ class StaticFeatures:
     vt_malicious_count: int
     vt_suspicious_count: int
     extracted_strings: List[str]
+
+    anti_analysis_score: float
+    anti_analysis_indicators: List[str]
+    resource_score: float
+    embedded_apks: int
+    embedded_dex: int
+    encrypted_blobs: int
+    suspicious_resources: List[dict]
+
+    crypto_score: float
+    encrypted_string_count: int
+    crypto_algorithms: List[str]
+    crypto_indicators: List[str]
+    crypto_ttps: List[str]
+    hardcoded_secrets: List[str]
 
 DANGEROUS_PERMISSIONS = {
     'READ_SMS': 5, 'RECEIVE_SMS': 5, 'SEND_SMS': 5,
@@ -120,6 +139,9 @@ decompiled_code = ""
 class StaticAnalyzer:
     def __init__(self):
         self.intel = ThreatIntel()
+        self.anti_analysis = AntiAnalysisDetector()
+        self.resource_analyzer = ResourceAnalyzer()
+        self.crypto_analyzer = CryptoAnalyzer()
 
     def analyze(self, apk_path: str) -> StaticFeatures:
         t0 = time.time()
@@ -401,6 +423,21 @@ class StaticAnalyzer:
         except Exception:
             pass
 
+        anti_analysis_result = self.anti_analysis.analyze(
+            decompiled_code=decompiled_code,
+            extracted_strings=strings 
+        )
+        
+        # We pass the raw APK path so it can inspect the ZIP headers
+        resource_result = self.resource_analyzer.analyze(
+            apk_path=apk_path
+        )
+
+        crypto_result = self.crypto_analyzer.analyze(
+            decompiled_code,
+            strings
+        )
+
         analysis_duration_ms = int((time.time() - t0) * 1000)
         
         return StaticFeatures(
@@ -432,7 +469,28 @@ class StaticAnalyzer:
             analysis_duration_ms=analysis_duration_ms,
             vt_malicious_count=vt_malicious_count,
             vt_suspicious_count=vt_suspicious_count,
-            extracted_strings=strings[:5000]
+            extracted_strings=strings[:5000],
+
+            anti_analysis_score=anti_analysis_result.score,
+            anti_analysis_indicators=anti_analysis_result.indicators,
+            resource_score=resource_result.score,
+            embedded_apks=resource_result.embedded_apks,
+            embedded_dex=resource_result.embedded_dex,
+            encrypted_blobs=resource_result.encrypted_blobs,
+            suspicious_resources=[
+                {
+                    "filename": f.filename, 
+                    "reason": f.reason, 
+                    "entropy": f.entropy
+                } for f in resource_result.suspicious_files
+            ],
+
+            crypto_score=crypto_result.score,
+            encrypted_string_count=crypto_result.encrypted_string_count,
+            crypto_algorithms=crypto_result.crypto_algorithms,
+            crypto_indicators=crypto_result.indicators,
+            crypto_ttps=crypto_result.ttps,
+            hardcoded_secrets=crypto_result.hardcoded_secrets
         )
 
 if __name__ == "__main__":

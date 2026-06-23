@@ -6,6 +6,8 @@
 ├── .dockerignore
 ├── .env
 ├── .gitignore
+├── .vscode
+│   └── tasks.json
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
 ├── Readme.md
@@ -28,8 +30,11 @@
 │   │       ├── sms_fraud.yar
 │   │       └── spyware.yar
 │   ├── intel
+│   │   ├── anti_analysis_detector.py
+│   │   ├── crypto_analyzer.py
 │   │   ├── family_classifier.py
-│   │   └── mitre_mapper.py
+│   │   ├── mitre_mapper.py
+│   │   └── resource_analyzer.py
 │   ├── main.py
 │   ├── models
 │   │   ├── .gitkeep
@@ -41,11 +46,17 @@
 │   ├── pipeline
 │   │   ├── __init__.py
 │   │   ├── behavior_scorer.py
+│   │   ├── confidence_engine.py
 │   │   ├── dynamic_analyzer.py
+│   │   ├── event_mapper.py
+│   │   ├── evidence_engine.py
 │   │   ├── llm_analyzer.py
 │   │   ├── orchestrator.py
 │   │   ├── report_generator.py
+│   │   ├── resilient_router.py
 │   │   ├── risk_scorer.py
+│   │   ├── runtime_collectors.py
+│   │   ├── runtime_events.py
 │   │   └── static_analyzer.py
 │   ├── requirements.txt
 │   ├── tests
@@ -93,13 +104,26 @@
 │   │   │   ├── RiskGauge.jsx
 │   │   │   ├── ShapExplainer.jsx
 │   │   │   ├── ThreatReport.jsx
-│   │   │   └── UploadZone.jsx
+│   │   │   ├── UploadZone.jsx
+│   │   │   └── tabs
 │   │   ├── index.css
-│   │   └── main.jsx
+│   │   ├── main.jsx
+│   │   └── utils
 │   ├── tailwind.config.js
 │   └── vite.config.js
 ├── get_structure_wsl.txt
 ├── nginx.conf
+├── samples
+│   ├── benign
+│   │   ├── F-Droid.apk
+│   │   ├── app.pwhs.blockads_50.apk
+│   │   ├── ch.protonvpn.android_605187501.apk
+│   │   ├── com.best.deskclock_2034.apk
+│   │   ├── com.newoether.agora_24.apk
+│   │   ├── com.yosefario.nclientv3_423.apk
+│   │   ├── edge.roll_4.apk
+│   │   └── org.lichess.mobileV2_240603.apk
+│   └── malware
 └── test.apk
 
-20 directories, 83 files
+26 directories, 101 files

@@ -58,6 +58,39 @@ class ReportGenerator:
             f"  - Code Behaviour: {llm.primary_function}. " + (" ".join(llm.malicious_behaviors) if llm.malicious_behaviors else "No specific malicious behavior cited by LLM."),
         ]
 
+        if getattr(static, 'anti_analysis_score', 0) > 0:
+            report_lines.append(f"  - Anti-Analysis/Evasion: Score {static.anti_analysis_score:.1f}. Indicators: {', '.join(getattr(static, 'anti_analysis_indicators', []))}")
+            
+        if getattr(static, 'embedded_apks', 0) > 0 or getattr(static, 'embedded_dex', 0) > 0:
+            report_lines.append(f"  - Hidden Payloads: {getattr(static, 'embedded_apks', 0)} APKs, {getattr(static, 'embedded_dex', 0)} DEX files embedded in resources.")
+            
+        if getattr(static, 'encrypted_blobs', 0) > 0:
+            report_lines.append(f"  - Encrypted Assets: {getattr(static, 'encrypted_blobs', 0)} highly obfuscated/encrypted blobs detected.")
+
+        if getattr(static, "crypto_score", 0) > 0:
+            report_lines.append(
+                f"  - Cryptographic Analysis: "
+                f"Score {static.crypto_score:.1f}"
+            )
+            report_lines.append(
+                f"    Algorithms: "
+                f"{', '.join(static.crypto_algorithms)}"
+            )
+            report_lines.append(
+                f"    Encrypted Strings: "
+                f"{static.encrypted_string_count}"
+            )
+        
+        crypto_ttps = getattr(static, 'crypto_ttps', [])
+        if crypto_ttps:
+            report_lines.append(f"  - Crypto TTPs: {', '.join(crypto_ttps)}")
+        
+        hardcoded_secrets = getattr(static, 'hardcoded_secrets', [])
+        if hardcoded_secrets:
+            report_lines.append("  - [!] HARDCODED SECRETS EXPOSED:")
+            for secret in hardcoded_secrets:
+                report_lines.append(f"      * {secret}")
+
         report_lines.append(
             f"ML MALWARE PROBABILITY: {score.ml_score:.2f}%"
         )
@@ -76,17 +109,20 @@ class ReportGenerator:
         report_lines.append("")
         report_lines.append("YARA MATCHES:")
 
-        for rule in yara_result.matched_families:
-            report_lines.append(f"  - {rule}")
+        if yara_result and getattr(yara_result,"matched_families",None):
+            for rule in yara_result.matched_families:
+                report_lines.append(f"  - {rule}")
+        else:
+            report_lines.append("  No YARA matches.")
 
         report_lines.append("")
         report_lines.append("MALWARE FAMILY:")
-        report_lines.append(
-            f"  {family_result.family}"
-        )
-        report_lines.append(
-            f"  Confidence: {family_result.confidence:.1f}%"
-        )
+        if family_result:
+            report_lines.append(f"  {getattr(family_result, 'family', 'Unknown')}")
+            report_lines.append(f"  Confidence: {getattr(family_result, 'confidence', 0):.1f}%")
+        else:
+            report_lines.append("  Unknown")
+            report_lines.append("  Confidence: 0.0%")
 
         report_lines.append("")
         report_lines.append("MITRE ATT&CK MOBILE:")
@@ -102,10 +138,11 @@ class ReportGenerator:
 
 
         report_lines.append("\n  [STATIC CAPABILITIES]")
-        for t in mitre_findings.techniques:
-            report_lines.append(
-                f"  - {t.technique_id}: {t.name}"
-            )
+        if mitre_findings and hasattr(mitre_findings,"techniques"):
+            for t in mitre_findings.techniques:
+                report_lines.append(f"  - {t.technique_id}: {t.name}")
+        else:
+            report_lines.append("  No MITRE techniques identified.")
 
         
         if dynamic.sandbox_mode == "emulated":
