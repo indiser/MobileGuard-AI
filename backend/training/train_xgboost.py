@@ -15,7 +15,9 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    roc_auc_score
+    roc_auc_score,
+    confusion_matrix,
+    accuracy_score
 )
 
 # Support running as a module (python -m backend.training.train_xgboost)
@@ -30,16 +32,21 @@ except ImportError:
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.normpath(os.path.join(_THIS_DIR, "..", "models"))
-
+PROJECT_ROOT = os.path.normpath(os.path.join(_THIS_DIR, "..", ".."))
+DATASET_PATH = os.path.join(PROJECT_ROOT, "dataset", "malware_dataset.csv")
 
 def train():
     if xgb is None or train_test_split is None:
         print("ERROR: xgboost or scikit-learn not installed. Run: pip install xgboost scikit-learn")
         return
 
-    print("Generating synthetic training data...")
     # Swap the comment below to use real Drebin/CIC-AndMal data once available:
-    df = pd.read_csv("dataset/malware_dataset.csv")
+    if not os.path.exists(DATASET_PATH):
+        print(f"FATAL ERROR: Could not find dataset at {DATASET_PATH}")
+        print("Please create the 'dataset' folder in your project root and place 'malware_dataset.csv' inside it.")
+        return
+
+    df = pd.read_csv(DATASET_PATH, low_memory=False)
 
     df["label"] = df["class"].map({
         "B": 0,
@@ -64,7 +71,7 @@ def train():
         df.drop(columns=non_numeric, inplace=True)
     
     print("Engineering features...")
-    X, y, feature_columns, scaler = engineer_features(df)
+    X, y, feature_columns = engineer_features(df)
 
     print("Splitting dataset...")
     X_train, X_test, y_train, y_test = train_test_split(
@@ -111,31 +118,21 @@ def train():
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:,1]
 
+    cm = confusion_matrix(y_test, y_pred)
+    tn, fp, fn, tp = cm.ravel()
+
     metrics = {
-        "auc": float(
-            roc_auc_score(
-                y_test,
-                y_prob
-            )
-        ),
-        "precision": float(
-            precision_score(
-                y_test,
-                y_pred
-            )
-        ),
-        "recall": float(
-            recall_score(
-                y_test,
-                y_pred
-            )
-        ),
-        "f1": float(
-            f1_score(
-                y_test,
-                y_pred
-            )
-        )
+        "accuracy": float(accuracy_score(y_test, y_pred)),
+        "auc": float(roc_auc_score(y_test, y_prob)),
+        "precision": float(precision_score(y_test, y_pred)),
+        "recall": float(recall_score(y_test, y_pred)),
+        "f1": float(f1_score(y_test, y_pred)),
+        "true_positives": int(tp),
+        "true_negatives": int(tn),
+        "false_positives": int(fp),
+        "false_negatives": int(fn),
+        "false_positive_rate": float(fp / max(fp + tn, 1)),
+        "false_negative_rate": float(fn / max(fn + tp, 1))
     }
 
     with open(os.path.join(MODELS_DIR,"model_metrics.json"),"w") as f:
@@ -162,10 +159,6 @@ def train():
     with open(cols_path, "w") as f:
         json.dump(feature_columns, f, indent=4)
     print(f"  Columns saved → {cols_path}")
-
-    scaler_path = os.path.join(MODELS_DIR, "scaler.pkl")
-    joblib.dump(scaler, scaler_path)
-    print(f"  Scaler saved  → {scaler_path}")
 
     print("Training complete.")
 
