@@ -1,19 +1,30 @@
-name: Malware Benchmark Pipeline
+name: MobileGuard Benchmark
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
-  run-dynamic-analysis:
-    runs-on: macos-latest
+  benchmark:
+    runs-on: macos-latest # CRITICAL: Required for hardware-accelerated Android emulation
+    env:
+      PYTHONPATH: .
+
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.10"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install System Dependencies
         run: brew install yara || true
@@ -23,21 +34,76 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      # NOTE: If your APKs are not committed to the repo, add a step here 
+      # to download them securely (e.g., from AWS S3 or a private server)
+      - name: Verify APK Dataset
+        run: |
+          echo "Benign APK count:"
+          find evaluation/benign -name "*.apk" | wc -l
+          
+          echo "Malware APK count:"
+          find evaluation/malware -name "*.apk" | wc -l
+
       - name: Run Benchmark in Cloud Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
           target: default
-          arch: x86_64
+          arch: arm64-v8a # Must match Apple Silicon architecture
           profile: Nexus 5X
-          # CRITICAL FIX: Point to the new directory and preserve the Python path
-          script: PYTHONPATH=. python evaluation/benchmark_runner.py
+          disable-animations: true
+          script: python evaluation/benchmark_runner.py
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
-      - name: Upload Evaluation Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Display Metrics
         if: always()
+        run: |
+          echo "========================"
+          echo "METRICS"
+          echo "========================"
+          if [ -f evaluation/metrics.json ]; then
+            cat evaluation/metrics.json
+          else
+            echo "metrics.json not found! Benchmark likely crashed."
+          fi
+
+      - name: Upload Benchmark Results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: evaluation/
+          path: |
+            evaluation/benchmark_results.csv
+            evaluation/metrics.json
+            evaluation/benchmark_errors.log
+
+      - name: Fail if Accuracy Too Low
+        if: always()
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          import os
+
+          if not os.path.exists("evaluation/metrics.json"):
+              print("Critical Failure: metrics.json does not exist. The pipeline crashed.")
+              sys.exit(1)
+
+          try:
+              with open("evaluation/metrics.json") as f:
+                  metrics = json.load(f)
+
+              accuracy = metrics.get("overall_accuracy", 0)
+              print(f"Pipeline Accuracy: {accuracy}")
+
+              if accuracy < 0.80:
+                  print("Benchmark failed: Accuracy is below the 80% threshold.")
+                  sys.exit(1)
+              
+              print("Benchmark passed. Accuracy is acceptable.")
+
+          except Exception as e:
+              print(f"Unable to validate metrics: {e}")
+              sys.exit(1)
+          EOF
