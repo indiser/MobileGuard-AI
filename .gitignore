@@ -32,6 +32,9 @@ ENV/
 backend/venv/
 backend/env/
 samples/
+benign/
+malware/
+reports/
 
 # Python Cache
 __pycache__/

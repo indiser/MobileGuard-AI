@@ -58,6 +58,18 @@
 │   │   ├── runtime_collectors.py
 │   │   ├── runtime_events.py
 │   │   └── static_analyzer.py
+│   ├── plugins
+│   │   ├── __init__.py
+│   │   ├── custom_detectors
+│   │   │   ├── banking_detectors.py
+│   │   │   ├── cerberus_detector.py
+│   │   │   ├── hydra_detector.py
+│   │   │   ├── ransomware_detector.py
+│   │   │   ├── sample_plugin.py
+│   │   │   ├── spyware_detector.py
+│   │   │   └── telegram_stealer.py
+│   │   ├── plugin_base.py
+│   │   └── plugin_manager.py
 │   ├── requirements.txt
 │   ├── tests
 │   │   ├── test_api.py
@@ -83,9 +95,12 @@
 │   │   ├── edge.roll_4.apk
 │   │   └── org.lichess.mobileV2_240603.apk
 │   ├── malware
+<<<<<<< HEAD
 │   │   ├── 4fa2ccd05dc0b3a8dfcb2f089eba1a8cbf90b858dcf8f45c5f3c4c2539e55c63.apk
 │   │   ├── a52d2105d680d029f9cc5c9c77f639e47ae520e41ce7294bbad77b8f2931796a.apk
 │   │   └── dbfc18d920ae1c2acab8aeb4eda81da4f3acd39dd3d5c8faa0cb20dfd85593d3.apk
+=======
+>>>>>>> feature/added_plugins_evaluations
 │   ├── metrics.py
 │   └── reports
 │       ├── csv_exporter.py
@@ -146,7 +161,11 @@
 └── test.apk
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 27 directories, 105 files
 =======
 26 directories, 101 files
 >>>>>>> feature/anti-analysis-resource-analysis-crypto-analysis
+=======
+29 directories, 112 files
+>>>>>>> feature/added_plugins_evaluations
