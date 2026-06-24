@@ -1,0 +1,38 @@
+name: Malware Benchmark Pipeline
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  run-dynamic-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Benchmark in Cloud Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          profile: Nexus 5X
+          script: python benchmark_runner.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Upload Metrics Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-metrics
+          path: evaluation/metrics.json
