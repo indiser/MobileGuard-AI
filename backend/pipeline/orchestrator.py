@@ -4,40 +4,25 @@ import uuid
 import dataclasses
 import json
 import hashlib
-# try:
-#     from backend.pipeline.static_analyzer import StaticAnalyzer
-#     from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
-#     from backend.pipeline.llm_analyzer import LLMAnalyzer
-#     from backend.pipeline.risk_scorer import RiskScorer
-#     from backend.pipeline.report_generator import ReportGenerator
-#     from backend.data.feature_store import FeatureStore
-#     from backend.data.audit_logger import AuditLogger
-#     from backend.dataset_feature_extractor import extract_from_static
-#     from backend import config
-#     from backend.detection.yara_engine import YaraEngine
-#     from backend.intel.mitre_mapper import MitreMapper
-#     from backend.intel.family_classifier import FamilyClassifier
-#     from backend.pipeline.evidence_engine import EvidenceEngine
-#     from backend.pipeline.confidence_engine import ConfidenceEngine
-#     from backend.plugins.plugin_manager import PluginManager
-# except ImportError:
-#     pass
+try:
+    from backend.pipeline.static_analyzer import StaticAnalyzer
+    from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
+    from backend.pipeline.llm_analyzer import LLMAnalyzer
+    from backend.pipeline.risk_scorer import RiskScorer
+    from backend.pipeline.report_generator import ReportGenerator
+    from backend.data.feature_store import FeatureStore
+    from backend.data.audit_logger import AuditLogger
+    from backend.dataset_feature_extractor import extract_from_static
+    from backend import config
+    from backend.detection.yara_engine import YaraEngine
+    from backend.intel.mitre_mapper import MitreMapper
+    from backend.intel.family_classifier import FamilyClassifier
+    from backend.pipeline.evidence_engine import EvidenceEngine
+    from backend.pipeline.confidence_engine import ConfidenceEngine
+    from backend.plugins.plugin_manager import PluginManager
+except ImportError:
+    pass
 
-from backend.pipeline.static_analyzer import StaticAnalyzer
-from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
-from backend.pipeline.llm_analyzer import LLMAnalyzer
-from backend.pipeline.risk_scorer import RiskScorer
-from backend.pipeline.report_generator import ReportGenerator
-from backend.data.feature_store import FeatureStore
-from backend.data.audit_logger import AuditLogger
-from backend.dataset_feature_extractor import extract_from_static
-from backend import config
-from backend.detection.yara_engine import YaraEngine
-from backend.intel.mitre_mapper import MitreMapper
-from backend.intel.family_classifier import FamilyClassifier
-from backend.pipeline.evidence_engine import EvidenceEngine
-from backend.pipeline.confidence_engine import ConfidenceEngine
-from backend.plugins.plugin_manager import PluginManager
 
 @dataclasses.dataclass
 class AnalysisResult:
