@@ -4,24 +4,40 @@ import uuid
 import dataclasses
 import json
 import hashlib
-try:
-    from backend.pipeline.static_analyzer import StaticAnalyzer
-    from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
-    from backend.pipeline.llm_analyzer import LLMAnalyzer
-    from backend.pipeline.risk_scorer import RiskScorer
-    from backend.pipeline.report_generator import ReportGenerator
-    from backend.data.feature_store import FeatureStore
-    from backend.data.audit_logger import AuditLogger
-    from backend.dataset_feature_extractor import extract_from_static
-    from backend import config
-    from backend.detection.yara_engine import YaraEngine
-    from backend.intel.mitre_mapper import MitreMapper
-    from backend.intel.family_classifier import FamilyClassifier
-    from backend.pipeline.evidence_engine import EvidenceEngine
-    from backend.pipeline.confidence_engine import ConfidenceEngine
-    from backend.plugins.plugin_manager import PluginManager
-except ImportError:
-    pass
+# try:
+#     from backend.pipeline.static_analyzer import StaticAnalyzer
+#     from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
+#     from backend.pipeline.llm_analyzer import LLMAnalyzer
+#     from backend.pipeline.risk_scorer import RiskScorer
+#     from backend.pipeline.report_generator import ReportGenerator
+#     from backend.data.feature_store import FeatureStore
+#     from backend.data.audit_logger import AuditLogger
+#     from backend.dataset_feature_extractor import extract_from_static
+#     from backend import config
+#     from backend.detection.yara_engine import YaraEngine
+#     from backend.intel.mitre_mapper import MitreMapper
+#     from backend.intel.family_classifier import FamilyClassifier
+#     from backend.pipeline.evidence_engine import EvidenceEngine
+#     from backend.pipeline.confidence_engine import ConfidenceEngine
+#     from backend.plugins.plugin_manager import PluginManager
+# except ImportError:
+#     pass
+
+from backend.pipeline.static_analyzer import StaticAnalyzer
+from backend.pipeline.dynamic_analyzer import DynamicAnalyzer
+from backend.pipeline.llm_analyzer import LLMAnalyzer
+from backend.pipeline.risk_scorer import RiskScorer
+from backend.pipeline.report_generator import ReportGenerator
+from backend.data.feature_store import FeatureStore
+from backend.data.audit_logger import AuditLogger
+from backend.dataset_feature_extractor import extract_from_static
+from backend import config
+from backend.detection.yara_engine import YaraEngine
+from backend.intel.mitre_mapper import MitreMapper
+from backend.intel.family_classifier import FamilyClassifier
+from backend.pipeline.evidence_engine import EvidenceEngine
+from backend.pipeline.confidence_engine import ConfidenceEngine
+from backend.plugins.plugin_manager import PluginManager
 
 @dataclasses.dataclass
 class AnalysisResult:
@@ -60,7 +76,8 @@ class PipelineEvent:
         return json.dumps(d)
 
 class PipelineOrchestrator:
-    def __init__(self):
+    def __init__(self, benchmark_mode = False):
+        self.benchmark_mode = benchmark_mode
         self.static_analyzer = StaticAnalyzer()
         self.dynamic_analyzer = DynamicAnalyzer()
         self.llm_analyzer = LLMAnalyzer()
@@ -74,6 +91,12 @@ class PipelineOrchestrator:
         self.evidence_engine = EvidenceEngine()
         self.confidence_engine = ConfidenceEngine()
         self.plugin_manager = PluginManager()
+
+        if self.benchmark_mode:
+            print("[!] BENCHMARK MODE ACTIVE: External APIs (VT, LLM) disconnected.")
+            # Neutralize VirusTotal and Domain intel network calls in memory
+            self.static_analyzer.intel.query_virustotal_hash = lambda h: None
+            self.static_analyzer.intel.is_malicious_domain = lambda d: False
         
     def save_to_temp(self, apk_bytes: bytes, filename: str) -> str:
         temp_dir = "temp_apks"
@@ -226,7 +249,7 @@ class PipelineOrchestrator:
                 )
             )
 
-            if score.composite_score > 40:
+            if score.composite_score > 40 and not self.benchmark_mode:
 
                 yield PipelineEvent(
                     stage="llm_analysis",

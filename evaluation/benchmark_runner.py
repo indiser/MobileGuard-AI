@@ -1,4 +1,5 @@
 import os
+import sys
 import csv
 import json
 import logging
@@ -7,13 +8,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
+# 1. Lock the absolute paths regardless of where the terminal is
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.append(str(PROJECT_ROOT))
+
+# Now we can safely import backend modules
 from backend.pipeline.orchestrator import PipelineOrchestrator
 from metrics import calculate_metrics
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-EVAL_DIR = Path("evaluation")
+# 2. Lock the evaluation directory to the script's actual location
+EVAL_DIR = SCRIPT_DIR
 BENIGN_DIR = EVAL_DIR / "benign"
 MALWARE_DIR = EVAL_DIR / "malware"
 
@@ -21,9 +26,11 @@ OUTPUT_CSV = EVAL_DIR / "benchmark_results.csv"
 OUTPUT_JSON = EVAL_DIR / "metrics.json"
 ERROR_LOG = EVAL_DIR / "benchmark_errors.log"
 
+# 3. Create the directory BEFORE initializing the logger
+EVAL_DIR.mkdir(parents=True, exist_ok=True)
+
 # Set this to 3-5 to parallelize ADB and LLM waits. 
-# Do not set it too high or you will crash your emulator / hit LLM rate limits.
-MAX_WORKERS = 4 
+MAX_WORKERS = 2
 
 # Setup isolated logging for the benchmark
 logging.basicConfig(
@@ -31,6 +38,7 @@ logging.basicConfig(
     level=logging.ERROR,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
 
 def collect_apks():
     samples = []
@@ -65,7 +73,7 @@ def analyze_single_apk(apk_path: str, label: int):
     
     # We instantiate a new orchestrator per thread to avoid state leakage, 
     # but the ML model and FeatureStore will use their own internal caching.
-    orchestrator = PipelineOrchestrator()
+    orchestrator = PipelineOrchestrator(benchmark_mode=True)
     
     try:
         with open(apk_path, "rb") as f:
