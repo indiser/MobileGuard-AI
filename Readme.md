@@ -1521,9 +1521,9 @@ mobileguard-ai/
 - [ ] **DEX2JAR Integration** - Decompile to Java bytecode for deeper semantic analysis
 - [ ] **Control Flow Graph (CFG) Analysis** - Detect code reachability and dead code patterns
 - [ ] **Data Flow Tracking** - Trace sensitive data from source to sink (taint analysis)
-- [ ] **String Encryption Detection** - Pattern matching for common encryption libraries (AES, RSA)
-- [ ] **Anti-Analysis Detection** - Identify emulator checks, debugger detection, root detection
-- [ ] **Resource Analysis** - Inspect assets, raw files, and embedded payloads
+- [x] **String Encryption Detection** - Pattern matching for common encryption libraries (AES, RSA)
+- [x] **Anti-Analysis Detection** - Identify emulator checks, debugger detection, root detection
+- [x] **Resource Analysis** - Inspect assets, raw files, and embedded payloads
 
 #### **Live Sandbox Enhancements**
 - [ ] **Automated Device Farm** - Integrate with AWS Device Farm or BrowserStack

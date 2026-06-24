@@ -30,8 +30,11 @@
 │   │       ├── sms_fraud.yar
 │   │       └── spyware.yar
 │   ├── intel
+│   │   ├── anti_analysis_detector.py
+│   │   ├── crypto_analyzer.py
 │   │   ├── family_classifier.py
-│   │   └── mitre_mapper.py
+│   │   ├── mitre_mapper.py
+│   │   └── resource_analyzer.py
 │   ├── main.py
 │   ├── models
 │   │   ├── .gitkeep
@@ -129,6 +132,21 @@
 │   └── vite.config.js
 ├── get_structure_wsl.txt
 ├── nginx.conf
+├── samples
+│   ├── benign
+│   │   ├── F-Droid.apk
+│   │   ├── app.pwhs.blockads_50.apk
+│   │   ├── ch.protonvpn.android_605187501.apk
+│   │   ├── com.best.deskclock_2034.apk
+│   │   ├── com.newoether.agora_24.apk
+│   │   ├── com.yosefario.nclientv3_423.apk
+│   │   ├── edge.roll_4.apk
+│   │   └── org.lichess.mobileV2_240603.apk
+│   └── malware
 └── test.apk
 
+<<<<<<< HEAD
 27 directories, 105 files
+=======
+26 directories, 101 files
+>>>>>>> feature/anti-analysis-resource-analysis-crypto-analysis

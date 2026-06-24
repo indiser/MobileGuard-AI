@@ -211,9 +211,40 @@ class RiskScorer:
             composite = min(100.0, composite + 10)
             boost_rules_applied.append("Dynamic code loading detected (+10)")
 
-        # NOTE: self-signed cert is already penalised via the developer_trust dimension
-        # score (100 - cert_trust_score). Adding a second boost on top would double-count
-        # it and unfairly inflate scores for legitimate personal/dev APKs.
+        # --- NEW ADVANCED INTEL BOOSTS ---
+        
+        # 1. Dropper / Embedded Payload Penalty
+        if getattr(static, 'embedded_apks', 0) > 0 or getattr(static, 'embedded_dex', 0) > 0:
+            payload_count = (
+                getattr(static, 'embedded_apks', 0)
+                + getattr(static, 'embedded_dex', 0)
+            )
+            payload_boost = min(
+                20 + ((payload_count - 1) * 5),
+                30
+            )
+            composite = min(100.0, composite + payload_boost)
+            boost_rules_applied.append(f"Hidden executable payloads (Dropper behavior) ({payload_boost})")
+
+        # 2. Packed/Encrypted Asset Penalty
+        if getattr(static, 'encrypted_blobs', 0) > 0:
+            composite = min(100.0, composite + 15)
+            boost_rules_applied.append("Encrypted/Packed blobs found in resources (+15)")
+
+        # 3. Sandbox Evasion / Anti-Analysis Penalty
+        anti_analysis_score = getattr(static, 'anti_analysis_score', 0.0)
+        if anti_analysis_score > 15:
+            # Scale the boost penalty relative to how aggressively they are trying to hide
+            evasion_boost = round(min(25.0, anti_analysis_score * 0.4), 1)
+            composite = min(100.0, composite + evasion_boost)
+            boost_rules_applied.append(f"Anti-analysis/evasion mechanisms detected (+{evasion_boost})")
+
+        
+        crypto_score = getattr(static,"crypto_score",0)
+        if crypto_score > 40:
+            crypto_boost = min(crypto_score * 0.15,10)
+            composite = min(100.0,composite + crypto_boost)
+            boost_rules_applied.append(f"Cryptographic obfuscation detected (+{crypto_boost:.1f})")
 
         if static.vt_malicious_count >= 5:
             composite = min(
