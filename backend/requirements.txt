@@ -9,7 +9,7 @@ google-generativeai==0.5.4
 pydantic
 sqlalchemy
 aiofiles==23.2.1
-python-magic-bin
+python-magic==0.4.27
 networkx
 numpy
 pandas
