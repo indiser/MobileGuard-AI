@@ -13,6 +13,7 @@ import traceback
 from typing import Dict, Any, List
 
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 
 # Try to load your config, otherwise fall back to env vars
@@ -64,25 +65,34 @@ class ResilientLLMRouter:
             full_prompt = f"{system_prompt}\n\n{user_prompt_template}\n\n[DECOMPILED CODE]\n{code_payload}"
 
             # --- TIER 1: PRIMARY (Gemini) ---
+            # --- TIER 1: PRIMARY (Gemini) ---
             if self.primary_client:
                 try:
-                    logger.info(f"Routing to Primary Tier: {ModelTiers.PRIMARY}")
-                    # Force native JSON output to prevent markdown hallucination
+                    print(f"[ROUTER] Routing to Primary Tier: {ModelTiers.PRIMARY} (Attempt {attempt+1})")
+                    # Force native JSON output and explicitly disable safety filters for malware analysis
                     response = self.primary_client.generate_content(
                         full_prompt,
                         generation_config=genai.GenerationConfig(
                             response_mime_type="application/json",
-                            temperature=0.1 # Low temp for analytical tasks
-                        )
+                            temperature=0.1
+                        ),
+                        safety_settings={
+                            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                        }
                     )
                     
                     parsed_json = self._extract_and_validate_json(response.text)
                     if parsed_json:
                         return parsed_json
+                    else:
+                        print(f"[ROUTER] Primary Tier returned empty or invalid JSON.")
                         
                 except Exception as e:
                     last_error = str(e)
-                    logger.warning(f"Primary Tier Failed: {e}")
+                    print(f"[ROUTER ERROR] Primary Tier Failed: {str(e)}") # Force output to Docker stdout
 
             # --- TIER 2: FALLBACK (OpenAI/GPT-4o) ---
             if self.fallback_client:
@@ -104,7 +114,7 @@ class ResilientLLMRouter:
 
                 except Exception as e:
                     last_error = str(e)
-                    logger.warning(f"Fallback Tier Failed: {e}")
+                    print(f"[ROUTER ERROR] Fallback Tier Failed: {str(e)}")
 
             # Brief backoff before truncation retry
             time.sleep(2)

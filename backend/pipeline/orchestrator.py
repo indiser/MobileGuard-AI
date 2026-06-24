@@ -12,7 +12,7 @@ try:
     from backend.pipeline.report_generator import ReportGenerator
     from backend.data.feature_store import FeatureStore
     from backend.data.audit_logger import AuditLogger
-    from backend.dataset_feature_extractor import extract_from_apk
+    from backend.dataset_feature_extractor import extract_from_static
     from backend import config
     from backend.detection.yara_engine import YaraEngine
     from backend.intel.mitre_mapper import MitreMapper
@@ -168,8 +168,6 @@ class PipelineOrchestrator:
                 dynamic_features=dynamic
             )
             
-            # Seamlessly merge plugin intelligence into the main evidence stream
-            evidence_findings.extend(plugin_findings)
 
             yield PipelineEvent(stage="risk_scoring", status="running", progress=60)
 
@@ -201,7 +199,10 @@ class PipelineOrchestrator:
                 )
             )
 
-            dataset_features = extract_from_apk(apk_path)
+            if plugin_findings:
+                evidence_findings.extend(plugin_findings)
+
+            dataset_features = extract_from_static(static)
             
             fallback_llm = (
                 self.llm_analyzer._get_fallback_features()
